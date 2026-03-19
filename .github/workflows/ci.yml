@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install server dependencies
+        run: cd server && bun install --frozen-lockfile
+
+      - name: Install client dependencies
+        run: cd client && bun install --frozen-lockfile
+
+      - name: Typecheck server
+        run: cd server && bun run typecheck
+
+      - name: Typecheck client
+        run: cd client && bun run tsc -b
+
+      - name: Build client
+        run: cd client && bun run build
