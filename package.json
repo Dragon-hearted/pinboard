@@ -1,0 +1,9 @@
+{
+  "name": "pinboard",
+  "private": true,
+  "scripts": {
+    "dev:server": "cd server && bun run dev",
+    "dev:client": "cd client && bun run dev",
+    "dev": "bun run dev:server & bun run dev:client"
+  }
+}
