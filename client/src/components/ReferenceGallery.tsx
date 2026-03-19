@@ -1,66 +1,101 @@
-import type { ImageRecord } from '../types'
+import type { TaggedImage } from '../types'
 import { getImageUrl } from '../api/client'
 
 interface ReferenceGalleryProps {
-  images: ImageRecord[]
+  images: TaggedImage[]
   onRemove: (id: string) => void
+  onToggleMode: (id: string) => void
 }
 
-export default function ReferenceGallery({ images, onRemove }: ReferenceGalleryProps) {
+export default function ReferenceGallery({ images, onRemove, onToggleMode }: ReferenceGalleryProps) {
+  if (images.length === 0) return null
+
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-3">
-        <h3 className="text-sm font-medium text-zinc-300">References</h3>
-        {images.length > 0 && (
-          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent-500 text-[10px] font-semibold text-white">
-            {images.length}
-          </span>
-        )}
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="section-label">References</span>
+        <span className="font-mono text-[10px]" style={{ color: 'var(--text-ghost)' }}>
+          {images.length} image{images.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
-      {images.length === 0 ? (
-        <p className="text-sm text-zinc-600 py-4 text-center">
-          No reference images yet
-        </p>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {images.map((image) => (
-            <div key={image.id} className="relative group">
-              <div className="rounded-lg overflow-hidden bg-zinc-900 aspect-square">
-                <img
-                  src={getImageUrl(image.id)}
-                  alt={image.originalName}
-                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                />
-                {/* Hover overlay */}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200" />
-                {/* Remove button */}
-                <button
-                  onClick={() => onRemove(image.id)}
-                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                  aria-label="Remove image"
-                >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
+      <div className="space-y-1.5">
+        {images.map((image) => (
+          <div
+            key={image.id}
+            className="group flex items-center gap-3 p-2 rounded-lg transition-all duration-150"
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-medium)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-subtle)'
+            }}
+          >
+            {/* Thumbnail with tag overlay */}
+            <div
+              className="relative w-12 h-12 flex-shrink-0 rounded-md overflow-hidden"
+              style={{ background: 'var(--bg-elevated)' }}
+            >
+              <img
+                src={getImageUrl(image.id)}
+                alt={image.originalName}
+                className="w-full h-full object-cover"
+              />
+              {/* Tag badge */}
+              <div className="absolute inset-x-0 bottom-0 px-1.5 py-0.5" style={{ background: 'rgba(20, 18, 16, 0.8)' }}>
+                <span className="text-[10px] font-mono font-medium" style={{ color: 'var(--accent)' }}>
+                  @{image.tag}
+                </span>
               </div>
-              <p className="text-xs text-zinc-500 truncate mt-1.5 px-0.5">
-                {image.originalName}
-              </p>
             </div>
-          ))}
-        </div>
-      )}
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{image.originalName}</p>
+              {/* Mode toggle */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleMode(image.id) }}
+                className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-medium cursor-pointer transition-colors"
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{
+                    background: image.referenceMode === 'generation' ? 'var(--accent)' : 'var(--text-ghost)',
+                  }}
+                />
+                <span style={{
+                  color: image.referenceMode === 'generation' ? 'var(--accent)' : 'var(--text-ghost)',
+                }}>
+                  {image.referenceMode === 'generation' ? 'ref' : 'context'}
+                </span>
+              </button>
+            </div>
+
+            {/* Remove */}
+            <button
+              onClick={() => onRemove(image.id)}
+              className="w-6 h-6 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-150"
+              style={{ color: 'var(--text-ghost)' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--danger-muted)'
+                e.currentTarget.style.color = 'var(--danger)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.color = 'var(--text-ghost)'
+              }}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

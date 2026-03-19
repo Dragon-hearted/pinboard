@@ -25,12 +25,31 @@ if (!existsSync(UPLOADS_DIR)) {
 const generate = new Hono();
 
 function toGenerationResult(record: GenerationRecord): GenerationResult {
+  let referenceImageIds: string[];
+  try {
+    const parsed = JSON.parse(record.referenceImageIds);
+    if (Array.isArray(parsed)) {
+      // Old format: plain string array
+      referenceImageIds = parsed;
+    } else if (parsed && typeof parsed === "object") {
+      // New format: { generation: string[], promptOnly: string[] }
+      referenceImageIds = [
+        ...(parsed.generation || []),
+        ...(parsed.promptOnly || []),
+      ];
+    } else {
+      referenceImageIds = [];
+    }
+  } catch {
+    referenceImageIds = [];
+  }
+
   return {
     id: record.id,
     imageUrl: `/api/images/${record.id}/file`,
     model: record.model,
     prompt: record.prompt,
-    referenceImageIds: JSON.parse(record.referenceImageIds),
+    referenceImageIds,
     createdAt: record.createdAt,
   };
 }
@@ -47,11 +66,14 @@ generate.post("/generate", async (c) => {
       return c.json({ error: "model is required" }, 400);
     }
 
-    // Resolve reference images
-    const referenceImageBuffers: { buffer: Buffer; mimeType: string }[] = [];
-    const referenceImageIds = body.referenceImageIds || [];
+    // Resolve reference images - support both new and old request shapes
+    const generationRefIds = body.generationRefIds || body.referenceImageIds || [];
+    const promptOnlyRefIds = body.promptOnlyRefIds || [];
 
-    for (const refId of referenceImageIds) {
+    const referenceImageBuffers: { buffer: Buffer; mimeType: string }[] = [];
+
+    // Only load generation ref images as buffers (not prompt-only ones)
+    for (const refId of generationRefIds) {
       const image = getImage(refId);
       if (!image) {
         return c.json(
@@ -95,7 +117,10 @@ generate.post("/generate", async (c) => {
       prompt: body.prompt,
       model: body.model,
       resultPath: filePath,
-      referenceImageIds: JSON.stringify(referenceImageIds),
+      referenceImageIds: JSON.stringify({
+        generation: generationRefIds,
+        promptOnly: promptOnlyRefIds,
+      }),
       createdAt: new Date().toISOString(),
     };
 

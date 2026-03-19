@@ -11,7 +11,6 @@ function formatTimestamp(dateStr: string): string {
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffMins = Math.floor(diffMs / 60000)
-
   if (diffMins < 1) return 'Just now'
   if (diffMins < 60) return `${diffMins}m ago`
   const diffHours = Math.floor(diffMins / 60)
@@ -21,55 +20,67 @@ function formatTimestamp(dateStr: string): string {
   return date.toLocaleDateString()
 }
 
-export default function GenerationHistory({
-  generations,
-  onSelect,
-  selectedId,
-}: GenerationHistoryProps) {
+export default function GenerationHistory({ generations, onSelect, selectedId }: GenerationHistoryProps) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-4 py-3">
-        <h2 className="text-xs uppercase tracking-wider text-zinc-500 font-medium">
-          History
-        </h2>
+      <div
+        className="px-4 py-4"
+        style={{ borderBottom: '1px solid var(--border-subtle)' }}
+      >
+        <div className="flex items-center justify-between">
+          <span className="section-label">History</span>
+          {generations.length > 0 && (
+            <span className="font-mono text-[10px]" style={{ color: 'var(--text-ghost)' }}>
+              {generations.length}
+            </span>
+          )}
+        </div>
       </div>
 
       {generations.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-zinc-600">No generations yet</p>
+        <div className="flex-1 flex items-center justify-center px-4">
+          <p className="text-xs text-center" style={{ color: 'var(--text-ghost)' }}>
+            Generated images will appear here
+          </p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto pb-4">
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
           {generations.map((gen) => {
             const isSelected = gen.id === selectedId
             return (
               <button
                 key={gen.id}
                 onClick={() => onSelect(gen)}
-                className={`
-                  w-full text-left flex gap-3 p-3 cursor-pointer rounded-lg mx-2 transition-colors duration-150
-                  ${
-                    isSelected
-                      ? 'bg-zinc-800 border-l-2 border-accent-500'
-                      : 'hover:bg-zinc-800/50 border-l-2 border-transparent'
+                className="w-full text-left flex gap-2.5 p-2 rounded-lg transition-all duration-150 cursor-pointer"
+                style={{
+                  background: isSelected ? 'var(--accent-subtle)' : 'transparent',
+                  borderLeft: isSelected ? '2px solid var(--accent)' : '2px solid transparent',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.background = 'var(--bg-surface)'
                   }
-                `}
-                style={{ width: 'calc(100% - 1rem)' }}
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.background = 'transparent'
+                  }
+                }}
               >
-                {/* Thumbnail */}
-                <div className="w-10 h-10 flex-shrink-0 rounded overflow-hidden bg-zinc-800">
-                  <img
-                    src={gen.imageUrl}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
+                <div
+                  className="w-9 h-9 flex-shrink-0 rounded-md overflow-hidden"
+                  style={{
+                    background: 'var(--bg-elevated)',
+                    boxShadow: isSelected ? '0 0 0 1px rgba(224, 122, 95, 0.2)' : 'none',
+                  }}
+                >
+                  <img src={gen.imageUrl} alt="" className="w-full h-full object-cover" />
                 </div>
-
-                {/* Details */}
                 <div className="flex-1 min-w-0">
                   <p
-                    className="text-sm text-zinc-300 leading-snug"
+                    className="text-[11px] leading-snug"
                     style={{
+                      color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -78,13 +89,9 @@ export default function GenerationHistory({
                   >
                     {gen.prompt}
                   </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-zinc-500">{gen.model}</span>
-                    <span className="text-zinc-700">·</span>
-                    <span className="text-xs text-zinc-500">
-                      {formatTimestamp(gen.createdAt)}
-                    </span>
-                  </div>
+                  <span className="text-[10px] mt-0.5 block font-mono" style={{ color: 'var(--text-ghost)' }}>
+                    {formatTimestamp(gen.createdAt)}
+                  </span>
                 </div>
               </button>
             )

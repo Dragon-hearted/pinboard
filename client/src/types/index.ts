@@ -8,8 +8,14 @@ export interface ImageRecord {
   createdAt: string;
 }
 
+export interface TaggedImage extends ImageRecord {
+  tag: number;  // 1-based sequential index
+  referenceMode: 'generation' | 'prompt-only';
+}
+
 export interface GenerationRequest {
-  referenceImageIds: string[];
+  generationRefIds: string[];
+  promptOnlyRefIds: string[];
   prompt: string;
   model: string;
   options?: Record<string, unknown>;
@@ -28,4 +34,5 @@ export interface ModelInfo {
   id: string;
   name: string;
   description: string;
+  available: boolean;
 }

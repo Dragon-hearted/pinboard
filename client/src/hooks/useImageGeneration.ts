@@ -3,7 +3,8 @@ import type { GenerationResult } from '../types'
 import { generate, getGenerations } from '../api/client'
 
 interface LastParams {
-  referenceImageIds: string[]
+  generationRefIds: string[]
+  promptOnlyRefIds: string[]
   prompt: string
   model: string
 }
@@ -30,12 +31,12 @@ export function useImageGeneration() {
   }, [])
 
   const generateImage = useCallback(
-    async (referenceImageIds: string[], prompt: string, model: string) => {
+    async (generationRefIds: string[], promptOnlyRefIds: string[], prompt: string, model: string) => {
       setLoading(true)
       setError(null)
-      lastParamsRef.current = { referenceImageIds, prompt, model }
+      lastParamsRef.current = { generationRefIds, promptOnlyRefIds, prompt, model }
       try {
-        const result = await generate({ referenceImageIds, prompt, model })
+        const result = await generate({ generationRefIds, promptOnlyRefIds, prompt, model })
         setCurrentResult(result)
         setGenerations((prev) => [result, ...prev])
       } catch (err: unknown) {
@@ -50,8 +51,8 @@ export function useImageGeneration() {
 
   const regenerate = useCallback(async () => {
     if (!lastParamsRef.current) return
-    const { referenceImageIds, prompt, model } = lastParamsRef.current
-    await generateImage(referenceImageIds, prompt, model)
+    const { generationRefIds, promptOnlyRefIds, prompt, model } = lastParamsRef.current
+    await generateImage(generationRefIds, promptOnlyRefIds, prompt, model)
   }, [generateImage])
 
   const selectGeneration = useCallback((gen: GenerationResult) => {

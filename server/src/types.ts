@@ -1,7 +1,10 @@
 export interface GenerationRequest {
-  referenceImageIds: string[];
   prompt: string;
   model: string;
+  generationRefIds: string[];   // Images sent as actual references to the model
+  promptOnlyRefIds: string[];   // Images referenced in prompt but NOT sent to model
+  // Keep backward compat
+  referenceImageIds?: string[];
   options?: Record<string, unknown>;
 }
 
@@ -37,6 +40,7 @@ export interface ModelInfo {
   id: string;
   name: string;
   description: string;
+  available: boolean;
 }
 
 export interface ImageProvider {

@@ -1,26 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Satoshi:wght@300;400;500;600;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: dark;
+
+  /* Warm Noir palette */
+  --bg-deep: #141210;
+  --bg-panel: #1b1916;
+  --bg-surface: #231f1c;
+  --bg-elevated: #2c2723;
+  --bg-hover: #352f2a;
+
+  --border-subtle: rgba(255, 235, 210, 0.06);
+  --border-medium: rgba(255, 235, 210, 0.10);
+  --border-strong: rgba(255, 235, 210, 0.16);
+
+  --text-primary: #f0e6d8;
+  --text-secondary: #a89a8a;
+  --text-tertiary: #6d6057;
+  --text-ghost: #4a423a;
+
+  --accent: #e07a5f;
+  --accent-hover: #eb8d74;
+  --accent-muted: rgba(224, 122, 95, 0.15);
+  --accent-subtle: rgba(224, 122, 95, 0.08);
+
+  --sage: #7d9b82;
+  --sage-muted: rgba(125, 155, 130, 0.2);
+
+  --danger: #c75050;
+  --danger-muted: rgba(199, 80, 80, 0.12);
 }
 
 body {
-  @apply bg-zinc-950 text-zinc-100 antialiased;
-  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'Satoshi', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar styling */
+/* Grain texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px;
+}
+
+/* Glass effects - warm toned */
+.glass {
+  background: rgba(27, 25, 22, 0.85);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid var(--border-medium);
+}
+
+.glass-elevated {
+  background: rgba(35, 31, 28, 0.6);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid var(--border-medium);
+}
+
+/* Custom scrollbar - warm */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-zinc-900;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-zinc-700 rounded-full;
+  background: var(--bg-elevated);
+  border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-zinc-600;
+  background: var(--bg-hover);
+}
+
+/* Tag reference highlight */
+.tag-ref {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* Autocomplete dropdown */
+.autocomplete-dropdown {
+  background: rgba(27, 25, 22, 0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6),
+              0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Focus ring - warm accent */
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.3);
+  border-radius: 8px;
+}
+
+/* Fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-warm {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Mono font utility */
+.font-mono {
+  font-family: 'DM Mono', 'JetBrains Mono', monospace;
+}
+
+/* Section label style */
+.section-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+/* Warm glow on generate button */
+.glow-coral {
+  box-shadow: 0 0 20px rgba(224, 122, 95, 0.2),
+              0 0 60px rgba(224, 122, 95, 0.05);
+}
+
+/* Dropdown animation */
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-dropdown {
+  animation: dropdown-enter 0.15s ease-out;
 }

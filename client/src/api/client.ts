@@ -50,5 +50,6 @@ export async function useAsReference(generationId: string): Promise<ImageRecord>
 export async function getModels(): Promise<ModelInfo[]> {
   const res = await fetch(`${BASE_URL}/models`)
   if (!res.ok) throw new Error(`Failed to fetch models: ${res.statusText}`)
-  return res.json()
+  const data = await res.json()
+  return data.models ?? data
 }
