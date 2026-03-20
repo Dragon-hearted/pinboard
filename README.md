@@ -18,7 +18,59 @@ Generate stunning images with multi-provider AI models, guided by your own refer
 
 ## 📽️ Demo
 
-> **[▶ Watch the demo video](./demo/out/video.mp4)** — see Pinboard in action: uploading references, tagging them in prompts, and generating images across multiple AI providers.
+<div align="center">
+
+### ✨ Welcome to Pinboard
+
+<img src="./demo/out/scenes/01-title.gif" alt="Pinboard — AI-Powered Image Generation" width="720" />
+
+---
+
+### 📤 Upload Reference Images
+
+Drag and drop your reference images directly into the panel to build your creative library.
+
+<img src="./demo/out/scenes/02-upload.gif" alt="Upload reference images" width="720" />
+
+---
+
+### 🏷️ Smart @-Tag References
+
+Type `@` in your prompt to tag reference images — autocomplete helps you pick the right one.
+
+<img src="./demo/out/scenes/03-tagging.gif" alt="Smart tagging system" width="720" />
+
+---
+
+### 🤖 Multi-Model Generation
+
+Switch between **NanoBanana Pro**, **SDXL**, and **FLUX Pro** — pick the best model for your vision.
+
+<img src="./demo/out/scenes/04-multi-model.gif" alt="Multiple AI models" width="720" />
+
+---
+
+### 🎨 Generate & Iterate
+
+Watch your images come to life in the 3-panel studio layout. Use any result as a new reference.
+
+<img src="./demo/out/scenes/05-generation.gif" alt="Image generation" width="720" />
+
+---
+
+### 📜 Generation History
+
+Browse and reuse your past generations — every creation is saved and searchable.
+
+<img src="./demo/out/scenes/06-history.gif" alt="Generation history" width="720" />
+
+---
+
+### 🚀 Built with Modern Tech
+
+<img src="./demo/out/scenes/07-closing.gif" alt="Tech stack" width="720" />
+
+</div>
 
 ---
 
