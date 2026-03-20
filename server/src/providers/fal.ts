@@ -22,16 +22,19 @@ export class FalProvider implements ImageProvider {
       name: "NanoBanana Pro",
       description:
         "Fast, high-quality image generation with reference support",
+      available: true,
     },
     {
       id: "stable-diffusion-xl",
       name: "Stable Diffusion XL",
       description: "Versatile image generation model",
+      available: true,
     },
     {
       id: "flux-pro",
       name: "FLUX Pro",
       description: "Advanced image generation with fine detail",
+      available: true,
     },
   ];
 
