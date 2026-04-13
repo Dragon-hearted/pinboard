@@ -70,16 +70,7 @@
 
 ![Pipeline](images/pipeline.svg)
 
-Pinboard processes data through a multi-stage pipeline:
-
-```mermaid
-flowchart LR
-    Pinboard_stage_0[content-ingestion]
-    Pinboard_stage_1[image-generation]
-    Pinboard_stage_0 --> Pinboard_stage_1
-    Pinboard_stage_2[delivery]
-    Pinboard_stage_1 --> Pinboard_stage_2
-```
+Pinboard processes data through a multi-stage pipeline.
 
 ---
 
