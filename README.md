@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎨 Pinboard
+![Pinboard](images/hero.svg)
 
 ### AI-powered image generation and reference board application with iterative workflow -- upload references, generate via Google Gemini/fal.ai, feed results back as references
 
@@ -67,6 +67,8 @@
 ---
 
 ## 🏗 Architecture
+
+![Pipeline](images/pipeline.svg)
 
 Pinboard processes data through a multi-stage pipeline:
 
@@ -180,6 +182,9 @@ pinboard/
 │   │   ├── index.ts
 │   │   └── theme.ts
 │   └── tsconfig.json
+├── images
+│   ├── hero.svg
+│   └── pipeline.svg
 ├── justfile
 ├── package.json
 └── server
