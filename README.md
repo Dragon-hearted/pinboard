@@ -2,145 +2,152 @@
 
 ![Pinboard](images/hero.svg)
 
-### AI-powered image generation and reference board application with iterative workflow -- upload references, generate via Google Gemini/fal.ai, feed results back as references
+### Terminal-first reference board and AI image generator — Pinterest import, ImageEngine generation, PromptWriter optimization, all from your shell
 
 ![Status](https://img.shields.io/badge/Status-active-brightgreen)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000)
-![Hono](https://img.shields.io/badge/Hono-4-E36002?logo=hono&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3-06B6D4?logo=tailwindcss&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
+![Ink](https://img.shields.io/badge/Ink-5-black)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=000)
 [![Bun](https://img.shields.io/badge/Bun-Runtime-f9f1e1?logo=bun&logoColor=000)](https://bun.sh/)
 
 </div>
 
 ---
 
-## 📽️ Demo
+Pinboard is a terminal application for collecting visual references and
+generating new images from them. The rewrite replaced the original React +
+Hono web app with a Warp-styled Ink TUI that runs entirely inside your
+terminal — no browser, no dev server, no localhost port.
 
-<div align="center">
-
-<img src="./demo/out/scenes/01-title.gif" alt="out/scenes/title" width="720" />
-
-<img src="./demo/out/scenes/02-upload.gif" alt="out/scenes/upload" width="720" />
-
-<img src="./demo/out/scenes/03-tagging.gif" alt="out/scenes/tagging" width="720" />
-
-<img src="./demo/out/scenes/04-multi-model.gif" alt="out/scenes/multi model" width="720" />
-
-<img src="./demo/out/scenes/05-generation.gif" alt="out/scenes/generation" width="720" />
-
-<img src="./demo/out/scenes/06-history.gif" alt="out/scenes/history" width="720" />
-
-<img src="./demo/out/scenes/07-closing.gif" alt="out/scenes/closing" width="720" />
-
-</div>
+The old web client and server are preserved under `.legacy/` for rollback
+reference only and will be deleted after the TUI has proven parity in daily
+use.
 
 ---
 
 ## 📑 Table of Contents
 
-- [✨ Features](#features)
-- [🏗 Architecture](#architecture)
-- [🛠 Tech Stack](#tech-stack)
-- [🚀 Getting Started](#getting-started)
-- [💻 Development](#development)
-- [📡 API Reference](#api-reference)
+- [✨ What it does](#what-it-does)
+- [🚀 Launch](#launch)
+- [⌨️ Keybindings](#keybindings)
+- [🧱 Dependencies](#dependencies)
+- [📌 Pinterest flow](#pinterest-flow)
+- [⚙️ Configuration](#configuration)
+- [🧪 Development](#development)
 - [📂 Project Structure](#project-structure)
-- [🤝 Contributing](#contributing)
 - [📄 License](#license)
 
 ---
 
-## ✨ Features
+## ✨ What it does
 
-| Feature | Description |
-|---------|-------------|
-| **image-generation** | Core task type |
-| **reference-management** | Core task type |
-| **visual-content** | Core task type |
-| **images Input** | Supported input type |
-| **text-prompt Input** | Supported input type |
-| **generated-image Output** | Supported output type |
-| **image-gallery Output** | Supported output type |
-
----
-
-## 🏗 Architecture
-
-![Pipeline](images/pipeline.svg)
-
-Pinboard processes data through a multi-stage pipeline.
+| Capability | Notes |
+|------------|-------|
+| **Reference board** | Manage local image references with tags and metadata in a SQLite-backed board. |
+| **Pinterest import** | Paste a Pinterest board or pin URL and Pinboard pulls the referenced images into the board. |
+| **AI image generation** | Generation runs through **ImageEngine** (WisGate / NanoBanana) with budget guards and rate limiting. |
+| **Prompt optimization** | Prompts are composed through **PromptWriter**, which enforces per-model best practices. |
+| **Vision tagging** | Optional auto-tagging and description via **Claude Code CLI** (no extra API key). |
+| **In-terminal previews** | Renders images inline in Kitty, Ghostty, iTerm2, and WezTerm; falls back to ASCII elsewhere. |
 
 ---
 
-## 🛠 Tech Stack
+## 🚀 Launch
 
-### Frontend
-
-| Technology | Purpose |
-|------------|---------|
-| **React 19** | UI framework |
-| **React-dom 19** | React DOM renderer |
-| **Tailwind CSS 3** | Utility-first styling |
-| **Vite 6** | Build tool & dev server |
-
-### Backend
-
-| Technology | Purpose |
-|------------|---------|
-| **TypeScript 5.8** | Type safety |
-| **Bun** | JavaScript runtime & package manager |
-| **Hono 4** | Lightweight web framework |
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- [**Bun**](https://bun.sh/) v1.0+ — `curl -fsSL https://bun.sh/install | bash`
-
-### Install
+From the monorepo root:
 
 ```bash
-cd systems/pinboard
-bun install
+bun run systems/pinboard/bin/pinboard
 ```
 
-### Run
+From inside `systems/pinboard/`:
 
 ```bash
-bun run systems/pinboard/server/src/index.ts
+./bin/pinboard
+# or
+just start
 ```
+
+On first launch Pinboard creates `pinboard.db` in the working directory and
+opens on the board screen.
 
 ---
 
-## 💻 Development
+## ⌨️ Keybindings
+
+| Key | Action |
+|-----|--------|
+| `j` `k` / `↑` `↓` | Move selection in the gallery |
+| `Tab` | Switch focus between gallery and prompt |
+| `Enter` | Confirm input / commit draft |
+| `a` | Add a local file as a reference |
+| `p` | Import from a Pinterest URL |
+| `v` | Draft a prompt from the highlighted reference via Claude vision |
+| `g` | Generate via ImageEngine using the current prompt |
+| `r` | Use the highlighted generation as a new reference |
+| `m` | Open the model picker |
+| `?` | Toggle help overlay |
+| `Esc` | Close modal / cancel |
+| `q` | Quit |
+
+The help overlay (`?`) is the source of truth — the table above is a quick
+reference.
+
+---
+
+## 🧱 Dependencies
+
+Pinboard composes three internal systems plus one external CLI:
+
+| Dependency | Role | Required |
+|------------|------|----------|
+| [**ImageEngine**](../image-engine) | Image generation via WisGate / NanoBanana with budget + rate limiting. | Yes |
+| [**PromptWriter**](../prompt-writer) | Per-model prompt composition and validation. | Yes |
+| **Claude Code CLI** (`claude`) | Vision tagging and descriptions (runs as a subprocess). | Optional |
+
+ImageEngine runs as an HTTP service (default `http://localhost:3002`) — start
+it in its own terminal before generating. PromptWriter is consumed as a
+library. The Claude CLI is invoked only when you run vision tagging.
+
+---
+
+## 📌 Pinterest flow
+
+1. Press `p` on the board screen and paste a Pinterest pin or board URL.
+2. Pinboard fetches the pin metadata and downloads the referenced images into
+   your board, deduplicated by source URL.
+3. Newly imported references appear on the board ready for selection,
+   tagging, or generation.
+
+No Pinterest login is required — only the public image URLs referenced by
+the pin page are fetched.
+
+---
+
+## ⚙️ Configuration
+
+Copy `.env.example` to `.env` and fill in what you need. Recognized keys:
+
+| Variable | Purpose |
+|----------|---------|
+| `WISDOM_GATE_KEY` | WisGate API key consumed by ImageEngine. Required for generation. |
+| `IMAGE_ENGINE_URL` | URL of the running ImageEngine service. Defaults to `http://localhost:3002`. |
+| `CLAUDE_BIN` | Path to the Claude Code CLI. Optional — defaults to `claude` on `$PATH`. |
+
+Legacy web-only variables (`GOOGLE_AI_STUDIO_KEY`, `FAL_KEY`) are no longer
+read by the TUI. If you are running anything under `.legacy/` you will need
+to restore them in a separate `.env`.
+
+---
+
+## 🧪 Development
 
 | Command | Description |
 |---------|-------------|
-| `bun run dev` | Start development mode |
-| `bun run build` | Build for production |
-| `bun test` | Run tests |
-| `bun run lint` | Check code quality |
-
----
-
-## 📡 API Reference
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/upload` | Ensure uploads directory exists |
-| `GET` | `/` | GET /images - List all images |
-| `GET` | `/:id` | GET /images/:id - Get image metadata |
-| `GET` | `/:id/file` | GET /images/:id/file - Serve the actual image file |
-| `DELETE` | `/:id` | DELETE /images/:id - Delete an image |
-| `POST` | `/generate` | POST / - Generate an image |
-| `GET` | `/generations` | GET /generations - List all generations |
-| `GET` | `/generations/:id` | GET /generations/:id - Get single generation |
-| `POST` | `/generations/:id/use-as-reference` | POST /generations/:id/use-as-reference - Copy generation result to images |
-| `GET` | `/` | GET / - List available models |
+| `bun run dev` | Start the TUI (alias for `bun run bin/pinboard`). |
+| `just tui-test` | Run the TUI test suite. |
+| `bun run typecheck` | Typecheck the TUI package. |
+| `bun run systems/pinboard/bin/pinboard --ci` | Smoke-render the TUI in CI mode (no interactive input). |
 
 ---
 
@@ -149,65 +156,38 @@ bun run systems/pinboard/server/src/index.ts
 ```
 pinboard/
 ├── README.md
-├── client
-│   ├── index.html
-│   ├── package.json
-│   ├── postcss.config.js
-│   ├── public
-│   │   └── vite.svg
-│   ├── src
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── vite-env.d.ts
-│   ├── tailwind.config.js
-│   ├── tsconfig.app.json
-│   ├── tsconfig.json
-│   └── vite.config.ts
-├── demo
-│   ├── out
-│   │   └── video.mp4
-│   ├── package.json
-│   ├── src
-│   │   ├── Main.tsx
-│   │   ├── Root.tsx
-│   │   ├── index.ts
-│   │   └── theme.ts
-│   └── tsconfig.json
-├── images
-│   ├── hero.svg
-│   └── pipeline.svg
+├── bin/
+│   └── pinboard            # bun entry shim — imports tui/src/cli.tsx
+├── tui/                    # Ink-based terminal UI (active runtime)
+│   └── src/
+│       ├── App.tsx
+│       ├── cli.tsx
+│       ├── components/
+│       ├── hooks/
+│       ├── screens/
+│       ├── services/       # imageengine, promptwriter, claudevision, pinterest, db
+│       └── utils/
+├── demo/                   # Remotion demo video (unrelated to app runtime)
+├── images/                 # README assets
+├── .legacy/                # Retired web client + server — see .legacy/README.md
+│   ├── README.md
+│   ├── client/             # React 19 + Vite (retired)
+│   └── server/             # Hono 4 API (retired)
 ├── justfile
 ├── package.json
-└── server
-    ├── package.json
-    ├── src
-    │   ├── db.ts
-    │   ├── index.ts
-    │   └── types.ts
-    └── tsconfig.json
+└── pinboard.db             # SQLite store (created on first launch)
 ```
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Here's how to get started:
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feat/my-feature`
-3. Make your changes and ensure tests pass
-4. Commit your changes and open a pull request
 
 ---
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](../../LICENSE).
 
 ---
 
 <div align="center">
 
-**Built with** 🧡 **using Bun, React, Hono, TypeScript**
+**Built with** 🧡 **using Bun, Ink, TypeScript, ImageEngine, PromptWriter**
 
 </div>

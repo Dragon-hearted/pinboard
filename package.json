@@ -1,9 +1,15 @@
 {
   "name": "pinboard",
   "private": true,
+  "workspaces": ["tui"],
+  "bin": {
+    "pinboard": "./bin/pinboard"
+  },
   "scripts": {
-    "dev:server": "cd server && bun run dev",
-    "dev:client": "cd client && bun run dev",
-    "dev": "bun run dev:server & bun run dev:client"
+    "dev": "bun run tui/src/cli.tsx",
+    "start": "bun run tui/src/cli.tsx",
+    "dev:tui": "bun run tui/src/cli.tsx",
+    "test": "cd tui && bun test",
+    "typecheck": "cd tui && bun run typecheck"
   }
 }

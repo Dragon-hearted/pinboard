@@ -7,31 +7,24 @@ default:
 
 # ─── Development ────────────────────────────────────────
 
-# Start Pinboard (server + client)
+# Start Pinboard TUI
 start:
-  bun run dev:server &
-  bun run dev:client &
-  @echo "Pinboard started"
-  @echo "  Client: http://localhost:5174"
-  @echo "  Server: http://localhost:3001"
+  bun run bin/pinboard
 
-# Stop Pinboard
-stop:
-  -lsof -ti:3001 | xargs kill 2>/dev/null
-  -lsof -ti:5174 | xargs kill 2>/dev/null
-  @echo "Pinboard stopped"
+# Alias for `start`
+tui:
+  bun run bin/pinboard
 
 # Install dependencies
 install:
-  cd server && bun install
-  cd client && bun install
+  bun install
 
-# ─── Individual Services ────────────────────────────────
+# ─── Tests / Typecheck ──────────────────────────────────
 
-# Start server only
-server:
-  cd server && bun run dev
+# Run TUI test suite
+tui-test:
+  cd tui && bun test
 
-# Start client only
-client:
-  cd client && bun run dev
+# Typecheck the TUI package
+typecheck:
+  cd tui && bun run typecheck
