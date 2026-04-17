@@ -7,7 +7,7 @@ on:
     branches: [master, main]
 
 jobs:
-  lint-and-typecheck:
+  typecheck-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,17 +15,11 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install server dependencies
-        run: cd server && bun install --frozen-lockfile
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-      - name: Install client dependencies
-        run: cd client && bun install --frozen-lockfile
+      - name: Typecheck
+        run: bun run typecheck
 
-      - name: Typecheck server
-        run: cd server && bun run typecheck
-
-      - name: Typecheck client
-        run: cd client && bun run tsc -b
-
-      - name: Build client
-        run: cd client && bun run build
+      - name: Test
+        run: bun run test
