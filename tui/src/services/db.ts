@@ -5,9 +5,11 @@
  */
 
 import { Database } from "bun:sqlite";
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import type { GenerationRecord, ImageRecord } from "./types";
+
+const UPLOADS_DIR = resolve(import.meta.dir, "../../../uploads");
 
 const DEFAULT_DB_PATH = resolve(
 	import.meta.dir,
@@ -199,6 +201,68 @@ export function deleteImage(id: string): void {
 			// filesystem already moved/removed — ignore
 		}
 	}
+}
+
+/**
+ * Delete every row in `images` and unlink each backing file. Returns the number
+ * of disk files actually removed (path existed and unlink succeeded).
+ */
+export function deleteAllImages(): { rows: number; files: number } {
+	const d = db();
+	const rows = d.prepare("SELECT path FROM images").all() as { path: string }[];
+	let files = 0;
+	for (const r of rows) {
+		if (r.path && existsSync(r.path)) {
+			try {
+				unlinkSync(r.path);
+				files += 1;
+			} catch {
+				// already gone — ignore
+			}
+		}
+	}
+	d.exec("DELETE FROM images");
+	return { rows: rows.length, files };
+}
+
+/**
+ * Delete every row in `generations` and unlink each `resultPath`. Mirrored
+ * `images` rows for generations are removed by `deleteAllImages` separately.
+ */
+export function deleteAllGenerations(): { rows: number; files: number } {
+	const d = db();
+	const rows = d
+		.prepare("SELECT resultPath FROM generations")
+		.all() as { resultPath: string }[];
+	let files = 0;
+	for (const r of rows) {
+		if (r.resultPath && existsSync(r.resultPath)) {
+			try {
+				unlinkSync(r.resultPath);
+				files += 1;
+			} catch {
+				// already gone — ignore
+			}
+		}
+	}
+	d.exec("DELETE FROM generations");
+	return { rows: rows.length, files };
+}
+
+/** Sweep orphan files in the uploads dir that no `images` row references. */
+export function purgeUploadOrphans(): number {
+	if (!existsSync(UPLOADS_DIR)) return 0;
+	let removed = 0;
+	for (const name of readdirSync(UPLOADS_DIR)) {
+		const full = `${UPLOADS_DIR}/${name}`;
+		try {
+			unlinkSync(full);
+			removed += 1;
+		} catch {
+			// permission / dir entry — ignore
+		}
+	}
+	return removed;
 }
 
 // Exported for external test access to migration SQL path.

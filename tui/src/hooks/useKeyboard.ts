@@ -12,6 +12,7 @@ export type ModalId =
 	| "pinterest"
 	| "help"
 	| "add-file"
+	| "clear-confirm"
 	| null;
 
 export type KeyHandler = (input: string, key: Key) => void;
@@ -29,7 +30,11 @@ export interface UseKeyboardOpts {
 	modalKeymap?: Keymap;
 	/** Disable pane/global keys — e.g., while text input is active. */
 	captureMode?: boolean;
+	/** Called when the user presses a key with no binding in the current mode. */
+	onInvalidKey?(reason: string): void;
 }
+
+const PRINTABLE = /^[\x20-\x7e]$/;
 
 export function useKeyboard(opts: UseKeyboardOpts): void {
 	const {
@@ -41,6 +46,7 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		paneKeymap,
 		modalKeymap,
 		captureMode,
+		onInvalidKey,
 	} = opts;
 
 	const { isRawModeSupported } = useStdin();
@@ -51,10 +57,13 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		if (modal) {
 			if (key.escape) {
 				setModal(null);
+				// Reset focus so we don't land back in a stale prompt captureMode.
+				setFocus("gallery");
 				return;
 			}
 			if (modal === "help" && input === "?") {
 				setModal(null);
+				setFocus("gallery");
 				return;
 			}
 			modalKeymap?.[input]?.(input, key);
@@ -65,6 +74,13 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		if (captureMode) {
 			if (key.escape) {
 				setFocus("gallery");
+				return;
+			}
+			if (key.tab) {
+				onInvalidKey?.(
+					"Press Enter to commit, then Tab to switch panes.",
+				);
+				return;
 			}
 			return;
 		}
@@ -90,13 +106,34 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 			setModal("add-file");
 			return;
 		}
+		if (input === "X") {
+			setModal("clear-confirm");
+			return;
+		}
 		if (key.tab) {
 			setFocus(focus === "gallery" ? "prompt" : "gallery");
 			return;
 		}
 
 			// Delegate to the focused pane's keymap.
-			paneKeymap?.[input]?.(input, key);
+			const handler = paneKeymap?.[input];
+			if (handler) {
+				handler(input, key);
+				return;
+			}
+			// Surface a hint for printable, unmapped keys (skip arrows / ctrl / meta).
+			if (
+				input &&
+				PRINTABLE.test(input) &&
+				!key.ctrl &&
+				!key.meta &&
+				!key.upArrow &&
+				!key.downArrow &&
+				!key.leftArrow &&
+				!key.rightArrow
+			) {
+				onInvalidKey?.(`Unknown key '${input}'. Press ? for help.`);
+			}
 		},
 		{ isActive: isRawModeSupported === true },
 	);

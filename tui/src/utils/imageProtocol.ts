@@ -4,14 +4,17 @@
  * Supported protocols (in order):
  *   - Kitty graphics (`\x1b_G...\x1b\\`) — Kitty, Ghostty
  *   - iTerm2 inline  (`\x1b]1337;File=...\x07`)
- *   - Sixel          — only if `sixel` CLI is on PATH (detected at call time)
- *   - ASCII fallback — simple placeholder string
+ *   - Sixel          — falls through to ANSI half-block today
+ *   - ANSI half-block — via `terminal-image` (works in any 24-bit colour terminal)
  *
- * We never touch the image bytes beyond base64 — terminal handles scaling.
+ * Native protocols are produced synchronously (just base64). The half-block
+ * path is async because it has to decode + downscale the image; callers
+ * receive `Promise<string>` uniformly.
  */
 
 import { readFileSync, existsSync } from "node:fs";
 import { extname } from "node:path";
+import terminalImage from "terminal-image";
 
 export type ImageProtocol = "kitty" | "iterm2" | "sixel" | "ascii";
 
@@ -38,15 +41,6 @@ function detectProtocolImpl(): ImageProtocol {
 		return "sixel";
 	}
 	return "ascii";
-}
-
-function mimeFor(path: string): string {
-	const ext = extname(path).toLowerCase();
-	if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-	if (ext === ".png") return "image/png";
-	if (ext === ".gif") return "image/gif";
-	if (ext === ".webp") return "image/webp";
-	return "application/octet-stream";
 }
 
 /** Encodes a file as a Kitty graphics protocol escape, chunked. */
@@ -84,14 +78,17 @@ function encodeITerm2(path: string, cols: number, rows: number): string {
 	return `\x1b]1337;File=${parts}:${b64}\x07`;
 }
 
-function asciiFallback(cols: number, rows: number, label: string): string {
+function placeholder(cols: number, rows: number, label: string): string {
 	const safeCols = Math.max(4, cols);
 	const safeRows = Math.max(2, rows);
 	const inner = Math.max(0, safeCols - 2);
 	const top = `┌${"─".repeat(inner)}┐`;
 	const bottom = `└${"─".repeat(inner)}┘`;
 	const lines: string[] = [top];
-	const textLine = label.length > inner ? `${label.slice(0, Math.max(0, inner - 1))}…` : label;
+	const textLine =
+		label.length > inner
+			? `${label.slice(0, Math.max(0, inner - 1))}…`
+			: label;
 	const pad = Math.max(0, inner - textLine.length);
 	for (let i = 0; i < safeRows - 2; i++) {
 		if (i === Math.floor((safeRows - 2) / 2)) {
@@ -104,49 +101,67 @@ function asciiFallback(cols: number, rows: number, label: string): string {
 	return lines.join("\n");
 }
 
+async function renderHalfBlock(
+	path: string,
+	cols: number,
+	rows: number,
+): Promise<string> {
+	// terminal-image renders 2 px per terminal row using ▀ / ▄, so request 2x rows.
+	const out = await terminalImage.file(path, {
+		width: cols,
+		height: rows * 2,
+		preserveAspectRatio: true,
+		preferNativeRender: false,
+	});
+	// terminal-image trails a newline; strip it so layout doesn't gain a row.
+	return out.endsWith("\n") ? out.slice(0, -1) : out;
+}
+
 export interface RenderThumbOpts {
 	path: string;
 	cols: number;
 	rows: number;
 	/** Override protocol (useful for tests / forcing ascii). */
 	protocol?: ImageProtocol;
-	/** Label shown in ASCII fallback; defaults to basename. */
+	/** Label shown when the file is missing or rendering fails. */
 	label?: string;
 }
 
 /**
  * Returns a string suitable for writing directly into an Ink `<Text>`.
  * For Kitty/iTerm2 this is a raw escape sequence the terminal overlays on
- * top of our grid. For Sixel/ASCII it's a visible textual placeholder.
+ * top of our grid. For Sixel/ASCII we render an ANSI half-block thumbnail.
  */
-export function renderThumb(opts: RenderThumbOpts): string {
+export async function renderThumb(opts: RenderThumbOpts): Promise<string> {
 	const { path, cols, rows } = opts;
 	const proto = opts.protocol ?? detectProtocol();
 	const label = opts.label ?? basenameish(path);
 
 	if (!existsSync(path)) {
-		return asciiFallback(cols, rows, `missing: ${label}`);
+		return placeholder(cols, rows, `missing: ${label}`);
 	}
 
 	try {
-		if (proto === "kitty") {
-			return encodeKitty(path, cols, rows);
-		}
-		if (proto === "iterm2") {
-			return encodeITerm2(path, cols, rows);
-		}
-		// Sixel and ASCII both fall back to visible placeholder in-app —
-		// real sixel requires a CLI dance we skip here.
-		const mime = mimeFor(path);
-		const hint =
-			proto === "sixel" ? "sixel not wired" : `${mime.split("/")[1] ?? ""}`;
-		return asciiFallback(cols, rows, hint ? `${label}  ${hint}` : label);
+		if (proto === "kitty") return encodeKitty(path, cols, rows);
+		if (proto === "iterm2") return encodeITerm2(path, cols, rows);
+		// sixel + ascii both render an ANSI half-block thumbnail.
+		return await renderHalfBlock(path, cols, rows);
 	} catch {
-		return asciiFallback(cols, rows, label);
+		return placeholder(cols, rows, label);
 	}
 }
 
 function basenameish(path: string): string {
 	const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
 	return idx >= 0 ? path.slice(idx + 1) : path;
+}
+
+/** Mime helper used by external code (kept exported for backwards-compat). */
+export function mimeFor(path: string): string {
+	const ext = extname(path).toLowerCase();
+	if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+	if (ext === ".png") return "image/png";
+	if (ext === ".gif") return "image/gif";
+	if (ext === ".webp") return "image/webp";
+	return "application/octet-stream";
 }

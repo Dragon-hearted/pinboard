@@ -3,21 +3,30 @@ import { colors, caption } from "../theme.ts";
 import type { BudgetStatus } from "../services/types.ts";
 import type { EngineStatus } from "../hooks/useImageEngine.ts";
 
+export type StatusTone = "info" | "warn" | "error";
+
+export interface StatusMessage {
+	text: string;
+	tone: StatusTone;
+}
+
 interface StatusBarProps {
 	engineStatus: EngineStatus;
 	modelName: string | null;
 	budget: BudgetStatus | null;
 	version: string;
+	message?: StatusMessage | null;
 }
 
 const HINTS =
-	"a add · p pin · v vision · g gen · r ref · m model · ? help · q quit";
+	"a add · p pin · d del · X clear · v vision · g gen · r ref · m model · ? help · q quit";
 
 export function StatusBar({
 	engineStatus,
 	modelName,
 	budget,
 	version,
+	message,
 }: StatusBarProps) {
 	const dotColor =
 		engineStatus === "up"
@@ -57,10 +66,22 @@ export function StatusBar({
 				<Text color={colors.stoneGray}>pinboard {version}</Text>
 			</Box>
 			<Box>
-				<Text color={colors.stoneGray}>{caption(HINTS)}</Text>
+				{message ? (
+					<Text color={messageColor(message.tone)}>
+						{caption(message.text)}
+					</Text>
+				) : (
+					<Text color={colors.stoneGray}>{caption(HINTS)}</Text>
+				)}
 			</Box>
 		</Box>
 	);
+}
+
+function messageColor(tone: StatusTone): string {
+	if (tone === "error") return colors.mutedRust;
+	if (tone === "warn") return colors.mutedOchre;
+	return colors.warmParchment;
 }
 
 function renderBudget(budget: BudgetStatus | null) {

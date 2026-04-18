@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, useApp } from "ink";
 import { Header } from "./components/Header.tsx";
-import { StatusBar } from "./components/StatusBar.tsx";
+import { StatusBar, type StatusMessage, type StatusTone } from "./components/StatusBar.tsx";
 
 import { Gallery } from "./screens/Gallery.tsx";
 import { PromptPanel } from "./screens/PromptPanel.tsx";
@@ -9,6 +9,7 @@ import { Preview } from "./screens/Preview.tsx";
 import { ModelPicker } from "./screens/ModelPicker.tsx";
 import { PinterestModal } from "./screens/PinterestModal.tsx";
 import { AddFileModal } from "./screens/AddFileModal.tsx";
+import { ClearConfirmModal } from "./screens/ClearConfirmModal.tsx";
 import { HelpOverlay } from "./screens/HelpOverlay.tsx";
 
 import { useReferences } from "./hooks/useReferences.ts";
@@ -21,6 +22,7 @@ import {
 	type ModalId,
 } from "./hooks/useKeyboard.ts";
 
+import * as db from "./services/db.ts";
 import * as promptwriter from "./services/promptwriter.ts";
 import * as claudevision from "./services/claudevision.ts";
 import type { PromptWriterModelInfo } from "./services/promptwriter.ts";
@@ -39,6 +41,26 @@ export function App() {
 	const [model, setModel] = useState<PromptWriterModelInfo | null>(null);
 	const [visionBusy, setVisionBusy] = useState(false);
 	const [visionError, setVisionError] = useState<string | null>(null);
+	const [message, setMessage] = useState<StatusMessage | null>(null);
+	const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const flash = useCallback(
+		(text: string, tone: StatusTone = "info", ms = 2000) => {
+			if (messageTimer.current) clearTimeout(messageTimer.current);
+			setMessage({ text, tone });
+			messageTimer.current = setTimeout(() => {
+				setMessage(null);
+				messageTimer.current = null;
+			}, ms);
+		},
+		[],
+	);
+
+	useEffect(() => {
+		return () => {
+			if (messageTimer.current) clearTimeout(messageTimer.current);
+		};
+	}, []);
 
 	// Default model: first from PromptWriter registry.
 	useEffect(() => {
@@ -112,6 +134,38 @@ export function App() {
 		}
 	}, [refs]);
 
+	const removeHighlighted = useCallback(() => {
+		const target = refs.references[refs.selectedIndex];
+		if (!target) {
+			flash("Nothing selected to remove.", "warn");
+			return;
+		}
+		const name = target.originalName;
+		try {
+			refs.remove(target.id);
+			flash(`Removed ${name}`, "info");
+		} catch (e) {
+			flash(`Remove failed: ${(e as Error).message}`, "error", 3000);
+		}
+	}, [refs, flash]);
+
+	const clearAll = useCallback(async () => {
+		try {
+			const img = db.deleteAllImages();
+			const gen = db.deleteAllGenerations();
+			const orphans = db.purgeUploadOrphans();
+			refs.refresh();
+			gens.refresh();
+			flash(
+				`Cleared ${img.rows} images, ${gen.rows} generations (${img.files + gen.files + orphans} files)`,
+				"info",
+				2500,
+			);
+		} catch (e) {
+			flash(`Clear failed: ${(e as Error).message}`, "error", 3000);
+		}
+	}, [refs, gens, flash]);
+
 	const galleryKeymap = useMemo<Keymap>(
 		() => ({
 			j: () => refs.selectDelta(1),
@@ -125,8 +179,11 @@ export function App() {
 			g: () => {
 				void generateNow();
 			},
+			d: () => {
+				removeHighlighted();
+			},
 		}),
-		[refs, useHighlightedAsRef, visionDraft, generateNow],
+		[refs, useHighlightedAsRef, visionDraft, generateNow, removeHighlighted],
 	);
 
 	const promptKeymap = useMemo<Keymap>(() => ({}), []);
@@ -141,6 +198,7 @@ export function App() {
 		quit: () => exit(),
 		paneKeymap: focus === "gallery" ? galleryKeymap : promptKeymap,
 		captureMode,
+		onInvalidKey: (reason) => flash(reason, "warn", 1800),
 	});
 
 	const latestGeneration = gens.generations[0] ?? null;
@@ -153,37 +211,84 @@ export function App() {
 		<Box flexDirection="column" paddingX={1} paddingY={1} width="100%">
 			<Header title="Pinboard" subtitle="Reference — Generate — Iterate" />
 
-			<Box flexDirection="row" marginTop={1} gap={1}>
-				<Gallery
-					references={refs.references}
-					selectedIndex={refs.selectedIndex}
-					focused={focus === "gallery"}
-					cardProps={{ width: "30%", flexShrink: 0 }}
-				/>
+			{modal === null ? (
+				<Box flexDirection="row" marginTop={1} gap={1}>
+					<Gallery
+						references={refs.references}
+						selectedIndex={refs.selectedIndex}
+						focused={focus === "gallery"}
+						cardProps={{ width: "30%", flexShrink: 0 }}
+					/>
 
-				<PromptPanel
-					focused={focus === "prompt"}
-					draft={draft}
-					onDraftChange={setDraft}
-					onDraftSubmit={(value) => {
-						setDraft(value);
-						setFocus("gallery");
-					}}
-					selectedModelLabel={modelLabel}
-					visionBusy={visionBusy}
-					inFlight={gens.inFlight}
-					lastError={gens.lastError ?? visionError}
-					references={refs.references}
-					cardProps={{ flexGrow: 1 }}
-				/>
+					<PromptPanel
+						focused={focus === "prompt"}
+						draft={draft}
+						onDraftChange={setDraft}
+						onDraftSubmit={(value) => {
+							setDraft(value);
+							setFocus("gallery");
+						}}
+						selectedModelLabel={modelLabel}
+						visionBusy={visionBusy}
+						inFlight={gens.inFlight}
+						lastError={gens.lastError ?? visionError}
+						references={refs.references}
+						cardProps={{ flexGrow: 1 }}
+					/>
 
-				<Preview
-					generation={latestGeneration}
-					inFlight={gens.inFlight}
-					lastError={gens.lastError}
-					cardProps={{ width: "30%", flexShrink: 0 }}
-				/>
-			</Box>
+					<Preview
+						generation={latestGeneration}
+						inFlight={gens.inFlight}
+						lastError={gens.lastError}
+						cardProps={{ width: "30%", flexShrink: 0 }}
+					/>
+				</Box>
+			) : (
+				<Box marginTop={1} flexDirection="column" alignItems="center">
+					{modal === "help" ? <HelpOverlay /> : null}
+					{modal === "model" ? (
+						<ModelPicker
+							currentModelName={model?.model}
+							onSelect={(m) => setModel(m)}
+							onClose={() => {
+								setModal(null);
+								setFocus("gallery");
+							}}
+						/>
+					) : null}
+					{modal === "pinterest" ? (
+						<PinterestModal
+							onImport={async (url) => {
+								await refs.addFromPinterest(url);
+							}}
+							onClose={() => {
+								setModal(null);
+								setFocus("gallery");
+							}}
+						/>
+					) : null}
+					{modal === "add-file" ? (
+						<AddFileModal
+							onAdd={async (path) => {
+								await refs.addFromFile(path);
+							}}
+							onClose={() => {
+								setModal(null);
+								setFocus("gallery");
+							}}
+						/>
+					) : null}
+					{modal === "clear-confirm" ? (
+						<ClearConfirmModal
+							onConfirm={clearAll}
+							onClose={() => {
+								setModal(null);
+								setFocus("gallery");
+							}}
+						/>
+					) : null}
+				</Box>
+			)}
 
 			<Box marginTop={1}>
 				<StatusBar
@@ -191,43 +296,9 @@ export function App() {
 					modelName={model?.model ?? null}
 					budget={engine.budget}
 					version={VERSION}
+					message={message}
 				/>
 			</Box>
-
-			{modal === "help" ? (
-				<Box marginTop={1}>
-					<HelpOverlay />
-				</Box>
-			) : null}
-			{modal === "model" ? (
-				<Box marginTop={1}>
-					<ModelPicker
-						currentModelName={model?.model}
-						onSelect={(m) => setModel(m)}
-						onClose={() => setModal(null)}
-					/>
-				</Box>
-			) : null}
-			{modal === "pinterest" ? (
-				<Box marginTop={1}>
-					<PinterestModal
-						onImport={async (url) => {
-							await refs.addFromPinterest(url);
-						}}
-						onClose={() => setModal(null)}
-					/>
-				</Box>
-			) : null}
-			{modal === "add-file" ? (
-				<Box marginTop={1}>
-					<AddFileModal
-						onAdd={async (path) => {
-							await refs.addFromFile(path);
-						}}
-						onClose={() => setModal(null)}
-					/>
-				</Box>
-			) : null}
 		</Box>
 	);
 }
