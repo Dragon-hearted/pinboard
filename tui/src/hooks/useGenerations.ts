@@ -19,6 +19,35 @@ export interface GenerateArgs {
 	promptOnlyRefIds?: string[];
 }
 
+/**
+ * Resolve pinboard image ids to inline base64 payloads for ImageEngine.
+ * Skips ids whose row is missing or whose file fails to load.
+ */
+export async function loadReferenceImages(
+	ids: string[],
+): Promise<Array<{ data: string; mimeType: string }>> {
+	const out: Array<{ data: string; mimeType: string }> = [];
+	for (const id of ids) {
+		const row = db.getImage(id);
+		if (!row) {
+			console.warn(`[pinboard] ref ${id}: no image row found, skipping`);
+			continue;
+		}
+		try {
+			const buf = await Bun.file(row.path).arrayBuffer();
+			out.push({
+				data: Buffer.from(buf).toString("base64"),
+				mimeType: row.mimeType,
+			});
+		} catch (err) {
+			console.warn(
+				`[pinboard] ref ${id}: failed to load ${row.path}: ${(err as Error).message}`,
+			);
+		}
+	}
+	return out;
+}
+
 export interface UseGenerationsApi {
 	generations: GenerationRecord[];
 	inFlight: boolean;
@@ -53,10 +82,12 @@ export function useGenerations(): UseGenerationsApi {
 					...(args.generationRefIds ?? []),
 					...(args.promptOnlyRefIds ?? []),
 				];
+				const referenceImages = await loadReferenceImages(combined);
 				const req: GenerationRequest = {
 					prompt: args.prompt,
 					model: args.modelId,
-					referenceImageIds: combined.length > 0 ? combined : undefined,
+					referenceImages:
+						referenceImages.length > 0 ? referenceImages : undefined,
 				};
 				const result = await imageengine.generate(req);
 
