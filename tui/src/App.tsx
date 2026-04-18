@@ -153,11 +153,12 @@ export function App() {
 		try {
 			const img = db.deleteAllImages();
 			const gen = db.deleteAllGenerations();
-			const orphans = db.purgeUploadOrphans();
+			const uploadOrphans = db.purgeUploadOrphans();
+			const downloadOrphans = db.purgeDownloadOrphans();
 			refs.refresh();
 			gens.refresh();
 			flash(
-				`Cleared ${img.rows} images, ${gen.rows} generations (${img.files + gen.files + orphans} files)`,
+				`Cleared ${img.rows} images, ${gen.rows} generations (${img.files + gen.files + uploadOrphans + downloadOrphans} files)`,
 				"info",
 				2500,
 			);
@@ -188,7 +189,33 @@ export function App() {
 
 	const promptKeymap = useMemo<Keymap>(() => ({}), []);
 
+	const [genIndex, setGenIndex] = useState(0);
+
+	// Snap back to the newest generation whenever one arrives.
+	const newestGenId = gens.generations[0]?.id ?? null;
+	useEffect(() => {
+		setGenIndex(0);
+	}, [newestGenId]);
+
+	const previewKeymap = useMemo<Keymap>(
+		() => ({
+			j: () =>
+				setGenIndex((i) =>
+					Math.min(i + 1, Math.max(0, gens.generations.length - 1)),
+				),
+			k: () => setGenIndex((i) => Math.max(0, i - 1)),
+		}),
+		[gens.generations.length],
+	);
+
 	const captureMode = focus === "prompt" && !modal;
+
+	const paneKeymap =
+		focus === "gallery"
+			? galleryKeymap
+			: focus === "preview"
+				? previewKeymap
+				: promptKeymap;
 
 	useKeyboard({
 		focus,
@@ -196,12 +223,12 @@ export function App() {
 		setFocus,
 		setModal,
 		quit: () => exit(),
-		paneKeymap: focus === "gallery" ? galleryKeymap : promptKeymap,
+		paneKeymap,
 		captureMode,
 		onInvalidKey: (reason) => flash(reason, "warn", 1800),
 	});
 
-	const latestGeneration = gens.generations[0] ?? null;
+	const selectedGeneration = gens.generations[genIndex] ?? null;
 
 	const modelLabel = model
 		? `${model.model} (${model.wisGateModel})`
@@ -237,9 +264,15 @@ export function App() {
 					/>
 
 					<Preview
-						generation={latestGeneration}
+						generation={selectedGeneration}
 						inFlight={gens.inFlight}
 						lastError={gens.lastError}
+						focused={focus === "preview"}
+						position={
+							gens.generations.length > 0
+								? { index: genIndex, total: gens.generations.length }
+								: null
+						}
 						cardProps={{ width: "30%", flexShrink: 0 }}
 					/>
 				</Box>

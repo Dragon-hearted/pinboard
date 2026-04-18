@@ -7,9 +7,8 @@
 import { Database } from "bun:sqlite";
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
+import { DOWNLOADS_DIR, UPLOADS_DIR } from "./paths";
 import type { GenerationRecord, ImageRecord } from "./types";
-
-const UPLOADS_DIR = resolve(import.meta.dir, "../../../uploads");
 
 const DEFAULT_DB_PATH = resolve(
 	import.meta.dir,
@@ -255,6 +254,22 @@ export function purgeUploadOrphans(): number {
 	let removed = 0;
 	for (const name of readdirSync(UPLOADS_DIR)) {
 		const full = `${UPLOADS_DIR}/${name}`;
+		try {
+			unlinkSync(full);
+			removed += 1;
+		} catch {
+			// permission / dir entry — ignore
+		}
+	}
+	return removed;
+}
+
+/** Sweep orphan files in the downloads dir (generated images cache). */
+export function purgeDownloadOrphans(): number {
+	if (!existsSync(DOWNLOADS_DIR)) return 0;
+	let removed = 0;
+	for (const name of readdirSync(DOWNLOADS_DIR)) {
+		const full = `${DOWNLOADS_DIR}/${name}`;
 		try {
 			unlinkSync(full);
 			removed += 1;

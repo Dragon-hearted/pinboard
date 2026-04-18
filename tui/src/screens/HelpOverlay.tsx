@@ -17,9 +17,9 @@ const GROUPS: Group[] = [
 	{
 		name: "Navigation",
 		bindings: [
-			{ key: "Tab", action: "Switch focus" },
-			{ key: "j / ↓", action: "Next reference" },
-			{ key: "k / ↑", action: "Previous reference" },
+			{ key: "Tab", action: "Cycle gallery → prompt → preview" },
+			{ key: "j / ↓", action: "Next (ref in Gallery, generation in Preview)" },
+			{ key: "k / ↑", action: "Previous (ref in Gallery, generation in Preview)" },
 			{ key: "Enter", action: "Focus prompt" },
 		],
 	},

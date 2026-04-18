@@ -6,6 +6,10 @@
 import { useCallback, useEffect, useState } from "react";
 import * as db from "../services/db.ts";
 import * as imageengine from "../services/imageengine.ts";
+import {
+	detectImageExt,
+	ensureDownloadsDir,
+} from "../services/paths.ts";
 import type {
 	GenerationRecord,
 	GenerationRequest,
@@ -91,6 +95,13 @@ export function useGenerations(): UseGenerationsApi {
 				};
 				const result = await imageengine.generate(req);
 
+				// ImageEngine returns a URL path (`/api/gallery/:id/image`). Pull the
+				// bytes down to `downloads/` so ImageThumb (path-based) can render it.
+				const bytes = await imageengine.getImage(result.id);
+				const ext = detectImageExt(bytes);
+				const downloadPath = `${ensureDownloadsDir()}/${result.id}.${ext}`;
+				await Bun.write(downloadPath, bytes);
+
 				const refsPayload =
 					args.generationRefIds || args.promptOnlyRefIds
 						? JSON.stringify({
@@ -103,7 +114,7 @@ export function useGenerations(): UseGenerationsApi {
 					id: result.id,
 					prompt: result.prompt,
 					model: result.model,
-					resultPath: result.imageUrl,
+					resultPath: downloadPath,
 					referenceImageIds: refsPayload,
 					createdAt: result.createdAt,
 				};

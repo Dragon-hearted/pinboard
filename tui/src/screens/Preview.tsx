@@ -3,6 +3,7 @@ import { Box, Text } from "ink";
 import { Spinner } from "@inkjs/ui";
 import { Card } from "../components/Card.tsx";
 import { ImageThumb } from "../components/ImageThumb.tsx";
+import { Pill } from "../components/Pill.tsx";
 import { colors, caption } from "../theme.ts";
 import type { GenerationRecord } from "../services/types.ts";
 
@@ -12,6 +13,8 @@ interface PreviewProps {
 	generation: GenerationRecord | null;
 	inFlight: boolean;
 	lastError?: string | null;
+	focused?: boolean;
+	position?: { index: number; total: number } | null;
 	cardProps?: CardProps;
 }
 
@@ -22,11 +25,23 @@ export function Preview({
 	generation,
 	inFlight,
 	lastError,
+	focused,
+	position,
 	cardProps,
 }: PreviewProps) {
 	return (
 		<Card {...cardProps}>
-			<Text color={colors.ashGray}>{caption("Preview")}</Text>
+			<Box justifyContent="space-between">
+				<Text color={colors.ashGray}>{caption("Preview")}</Text>
+				{focused ? <Pill>focus</Pill> : null}
+			</Box>
+			{position && position.total > 1 ? (
+				<Box>
+					<Text color={colors.stoneGray}>
+						{caption(`${position.index + 1} / ${position.total}`)}
+					</Text>
+				</Box>
+			) : null}
 
 			<Box marginTop={1} flexDirection="column">
 				{inFlight ? (

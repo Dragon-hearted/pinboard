@@ -6,7 +6,15 @@
 
 import { useInput, useStdin, type Key } from "ink";
 
-export type FocusId = "gallery" | "prompt";
+export type FocusId = "gallery" | "prompt" | "preview";
+
+const FOCUS_CYCLE: FocusId[] = ["gallery", "prompt", "preview"];
+
+function nextFocus(current: FocusId): FocusId {
+	const i = FOCUS_CYCLE.indexOf(current);
+	const next = (i + 1) % FOCUS_CYCLE.length;
+	return FOCUS_CYCLE[next] ?? "gallery";
+}
 export type ModalId =
 	| "model"
 	| "pinterest"
@@ -111,7 +119,7 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 			return;
 		}
 		if (key.tab) {
-			setFocus(focus === "gallery" ? "prompt" : "gallery");
+			setFocus(nextFocus(focus));
 			return;
 		}
 
