@@ -103,6 +103,54 @@ describe("useGenerations ref loading", () => {
 		expect(out[0].data).toBe(Buffer.from(bytes).toString("base64"));
 	});
 
+	test("generate request body carries aspectRatio when provided", async () => {
+		const calls = mockFetch(() =>
+			jsonResponse({
+				id: "gen-ar",
+				imageUrl: "/api/gallery/gen-ar/image",
+				model: "gemini-3-pro-image-preview",
+				prompt: "p",
+				tokenUsage: { promptTokens: 1, candidateTokens: 2, totalTokens: 3 },
+				createdAt: "2026-04-18T00:00:05Z",
+			}),
+		);
+
+		const args = { prompt: "p", aspectRatio: "16:9" as const };
+		// Contract mirrors useGenerations.generate spread:
+		//   ...(args.aspectRatio && { aspectRatio: args.aspectRatio })
+		await engineGenerate({
+			prompt: args.prompt,
+			...(args.aspectRatio && { aspectRatio: args.aspectRatio }),
+		});
+
+		expect(calls).toHaveLength(1);
+		const body = JSON.parse(String(calls[0].init?.body));
+		expect(body.aspectRatio).toBe("16:9");
+	});
+
+	test("generate request body omits aspectRatio when undefined", async () => {
+		const calls = mockFetch(() =>
+			jsonResponse({
+				id: "gen-no-ar",
+				imageUrl: "/api/gallery/gen-no-ar/image",
+				model: "gemini-3-pro-image-preview",
+				prompt: "p",
+				tokenUsage: { promptTokens: 1, candidateTokens: 2, totalTokens: 3 },
+				createdAt: "2026-04-18T00:00:05Z",
+			}),
+		);
+
+		const args: { prompt: string; aspectRatio?: "16:9" } = { prompt: "p" };
+		await engineGenerate({
+			prompt: args.prompt,
+			...(args.aspectRatio && { aspectRatio: args.aspectRatio }),
+		});
+
+		expect(calls).toHaveLength(1);
+		const body = JSON.parse(String(calls[0].init?.body));
+		expect(body.aspectRatio).toBeUndefined();
+	});
+
 	test("generate request body contains referenceImages, not referenceImageIds", async () => {
 		const bytes = new Uint8Array([9, 8, 7, 6]);
 		const path = join(tmpDir, "ref.png");

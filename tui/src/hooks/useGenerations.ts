@@ -11,6 +11,7 @@ import {
 	ensureDownloadsDir,
 } from "../services/paths.ts";
 import type {
+	AspectRatio,
 	GenerationRecord,
 	GenerationRequest,
 	WisGateModel,
@@ -21,6 +22,7 @@ export interface GenerateArgs {
 	modelId: WisGateModel;
 	generationRefIds?: string[];
 	promptOnlyRefIds?: string[];
+	aspectRatio?: AspectRatio;
 }
 
 /**
@@ -92,6 +94,7 @@ export function useGenerations(): UseGenerationsApi {
 					model: args.modelId,
 					referenceImages:
 						referenceImages.length > 0 ? referenceImages : undefined,
+					...(args.aspectRatio && { aspectRatio: args.aspectRatio }),
 				};
 				const result = await imageengine.generate(req);
 

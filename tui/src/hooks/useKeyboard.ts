@@ -21,6 +21,7 @@ export type ModalId =
 	| "help"
 	| "add-file"
 	| "clear-confirm"
+	| "aspect-ratio"
 	| null;
 
 export type KeyHandler = (input: string, key: Key) => void;
@@ -114,7 +115,11 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 			setModal("add-file");
 			return;
 		}
-		if (input === "X") {
+		if (input === "r") {
+			setModal("aspect-ratio");
+			return;
+		}
+		if (input === "x" || input === "X") {
 			setModal("clear-confirm");
 			return;
 		}
