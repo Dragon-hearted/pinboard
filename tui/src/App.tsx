@@ -11,6 +11,7 @@ import { PinterestModal } from "./screens/PinterestModal.tsx";
 import { AddFileModal } from "./screens/AddFileModal.tsx";
 import { ClearConfirmModal } from "./screens/ClearConfirmModal.tsx";
 import { HelpOverlay } from "./screens/HelpOverlay.tsx";
+import { AspectRatioPicker } from "./screens/AspectRatioPicker.tsx";
 
 import { useReferences } from "./hooks/useReferences.ts";
 import { useGenerations } from "./hooks/useGenerations.ts";
@@ -26,6 +27,7 @@ import * as db from "./services/db.ts";
 import * as promptwriter from "./services/promptwriter.ts";
 import * as claudevision from "./services/claudevision.ts";
 import type { PromptWriterModelInfo } from "./services/promptwriter.ts";
+import type { AspectRatio } from "./services/types.ts";
 
 const VERSION = "0.1.0";
 
@@ -39,6 +41,7 @@ export function App() {
 	const [modal, setModal] = useState<ModalId>(null);
 	const [draft, setDraft] = useState("");
 	const [model, setModel] = useState<PromptWriterModelInfo | null>(null);
+	const [aspectRatio, setAspectRatio] = useState<AspectRatio | null>(null);
 	const [visionBusy, setVisionBusy] = useState(false);
 	const [visionError, setVisionError] = useState<string | null>(null);
 	const [message, setMessage] = useState<StatusMessage | null>(null);
@@ -94,8 +97,9 @@ export function App() {
 			prompt: templated,
 			modelId: model.wisGateModel,
 			generationRefIds,
+			aspectRatio: aspectRatio ?? undefined,
 		});
-	}, [draft, model, refs, gens]);
+	}, [draft, model, refs, gens, aspectRatio]);
 
 	const visionDraft = useCallback(async () => {
 		const target = refs.references[refs.selectedIndex];
@@ -153,11 +157,12 @@ export function App() {
 		try {
 			const img = db.deleteAllImages();
 			const gen = db.deleteAllGenerations();
-			const orphans = db.purgeUploadOrphans();
+			const uploadOrphans = db.purgeUploadOrphans();
+			const downloadOrphans = db.purgeDownloadOrphans();
 			refs.refresh();
 			gens.refresh();
 			flash(
-				`Cleared ${img.rows} images, ${gen.rows} generations (${img.files + gen.files + orphans} files)`,
+				`Cleared ${img.rows} images, ${gen.rows} generations (${img.files + gen.files + uploadOrphans + downloadOrphans} files)`,
 				"info",
 				2500,
 			);
@@ -170,7 +175,7 @@ export function App() {
 		() => ({
 			j: () => refs.selectDelta(1),
 			k: () => refs.selectDelta(-1),
-			r: () => {
+			u: () => {
 				void useHighlightedAsRef();
 			},
 			v: () => {
@@ -188,7 +193,33 @@ export function App() {
 
 	const promptKeymap = useMemo<Keymap>(() => ({}), []);
 
+	const [genIndex, setGenIndex] = useState(0);
+
+	// Snap back to the newest generation whenever one arrives.
+	const newestGenId = gens.generations[0]?.id ?? null;
+	useEffect(() => {
+		setGenIndex(0);
+	}, [newestGenId]);
+
+	const previewKeymap = useMemo<Keymap>(
+		() => ({
+			j: () =>
+				setGenIndex((i) =>
+					Math.min(i + 1, Math.max(0, gens.generations.length - 1)),
+				),
+			k: () => setGenIndex((i) => Math.max(0, i - 1)),
+		}),
+		[gens.generations.length],
+	);
+
 	const captureMode = focus === "prompt" && !modal;
+
+	const paneKeymap =
+		focus === "gallery"
+			? galleryKeymap
+			: focus === "preview"
+				? previewKeymap
+				: promptKeymap;
 
 	useKeyboard({
 		focus,
@@ -196,12 +227,12 @@ export function App() {
 		setFocus,
 		setModal,
 		quit: () => exit(),
-		paneKeymap: focus === "gallery" ? galleryKeymap : promptKeymap,
+		paneKeymap,
 		captureMode,
 		onInvalidKey: (reason) => flash(reason, "warn", 1800),
 	});
 
-	const latestGeneration = gens.generations[0] ?? null;
+	const selectedGeneration = gens.generations[genIndex] ?? null;
 
 	const modelLabel = model
 		? `${model.model} (${model.wisGateModel})`
@@ -237,9 +268,15 @@ export function App() {
 					/>
 
 					<Preview
-						generation={latestGeneration}
+						generation={selectedGeneration}
 						inFlight={gens.inFlight}
 						lastError={gens.lastError}
+						focused={focus === "preview"}
+						position={
+							gens.generations.length > 0
+								? { index: genIndex, total: gens.generations.length }
+								: null
+						}
 						cardProps={{ width: "30%", flexShrink: 0 }}
 					/>
 				</Box>
@@ -281,6 +318,19 @@ export function App() {
 					{modal === "clear-confirm" ? (
 						<ClearConfirmModal
 							onConfirm={clearAll}
+							onClose={() => {
+								setModal(null);
+								setFocus("gallery");
+							}}
+						/>
+					) : null}
+					{modal === "aspect-ratio" ? (
+						<AspectRatioPicker
+							current={aspectRatio}
+							onSelect={(r) => {
+								setAspectRatio(r);
+								flash(r ? `Ratio: ${r}` : "Ratio: auto", "info");
+							}}
 							onClose={() => {
 								setModal(null);
 								setFocus("gallery");

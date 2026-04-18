@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 uploads/
+downloads/
 *.db
 *.db-wal
 *.db-shm

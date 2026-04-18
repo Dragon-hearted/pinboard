@@ -6,13 +6,22 @@
 
 import { useInput, useStdin, type Key } from "ink";
 
-export type FocusId = "gallery" | "prompt";
+export type FocusId = "gallery" | "prompt" | "preview";
+
+const FOCUS_CYCLE: FocusId[] = ["gallery", "prompt", "preview"];
+
+function nextFocus(current: FocusId): FocusId {
+	const i = FOCUS_CYCLE.indexOf(current);
+	const next = (i + 1) % FOCUS_CYCLE.length;
+	return FOCUS_CYCLE[next] ?? "gallery";
+}
 export type ModalId =
 	| "model"
 	| "pinterest"
 	| "help"
 	| "add-file"
 	| "clear-confirm"
+	| "aspect-ratio"
 	| null;
 
 export type KeyHandler = (input: string, key: Key) => void;
@@ -106,12 +115,16 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 			setModal("add-file");
 			return;
 		}
-		if (input === "X") {
+		if (input === "r") {
+			setModal("aspect-ratio");
+			return;
+		}
+		if (input === "x" || input === "X") {
 			setModal("clear-confirm");
 			return;
 		}
 		if (key.tab) {
-			setFocus(focus === "gallery" ? "prompt" : "gallery");
+			setFocus(nextFocus(focus));
 			return;
 		}
 

@@ -77,8 +77,8 @@ opens on the board screen.
 
 | Key | Action |
 |-----|--------|
-| `j` `k` / `↑` `↓` | Move selection in the gallery |
-| `Tab` | Switch focus between gallery and prompt |
+| `j` `k` / `↑` `↓` | Move selection in the focused pane (gallery refs or preview generations) |
+| `Tab` | Cycle focus: gallery → prompt → preview |
 | `Enter` | Confirm input / commit draft |
 | `a` | Add a local file as a reference |
 | `p` | Import from a Pinterest URL |
@@ -167,6 +167,8 @@ pinboard/
 │       ├── screens/
 │       ├── services/       # imageengine, promptwriter, claudevision, pinterest, db
 │       └── utils/
+├── uploads/                # Reference images (file adds + Pinterest imports)
+├── downloads/              # Locally cached copies of ImageEngine generations
 ├── demo/                   # Remotion demo video (unrelated to app runtime)
 ├── images/                 # README assets
 ├── .legacy/                # Retired web client + server — see .legacy/README.md

@@ -19,7 +19,7 @@ interface StatusBarProps {
 }
 
 const HINTS =
-	"a add · p pin · d del · X clear · v vision · g gen · r ref · m model · ? help · q quit";
+	"a add · p pin · d del · x clear · v vision · g gen · r ratio · u ref · m model · ? help · q quit";
 
 export function StatusBar({
 	engineStatus,
