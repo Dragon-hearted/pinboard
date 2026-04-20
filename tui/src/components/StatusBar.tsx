@@ -13,6 +13,7 @@ export interface StatusMessage {
 interface StatusBarProps {
 	engineStatus: EngineStatus;
 	modelName: string | null;
+	aspectRatioLabel?: string | null;
 	budget: BudgetStatus | null;
 	version: string;
 	message?: StatusMessage | null;
@@ -24,6 +25,7 @@ const HINTS =
 export function StatusBar({
 	engineStatus,
 	modelName,
+	aspectRatioLabel,
 	budget,
 	version,
 	message,
@@ -60,6 +62,8 @@ export function StatusBar({
 					<Text color={colors.ashGray}>{statusLabel}</Text>
 					<Text color={colors.stoneGray}>{"    MODEL "}</Text>
 					<Text color={colors.warmParchment}>{modelName ?? "—"}</Text>
+					<Text color={colors.stoneGray}>{"    RATIO "}</Text>
+					<Text color={colors.warmParchment}>{aspectRatioLabel ?? "Auto"}</Text>
 					<Text color={colors.stoneGray}>{"    BUDGET "}</Text>
 					{renderBudget(budget)}
 				</Text>

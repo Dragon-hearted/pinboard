@@ -344,6 +344,7 @@ export function App() {
 				<StatusBar
 					engineStatus={engine.status}
 					modelName={model?.model ?? null}
+					aspectRatioLabel={aspectRatio ?? "Auto"}
 					budget={engine.budget}
 					version={VERSION}
 					message={message}
