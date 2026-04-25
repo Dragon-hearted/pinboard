@@ -2,6 +2,7 @@ import { Box, Text } from "ink";
 import { colors, caption } from "../theme.ts";
 import type { BudgetStatus } from "../services/types.ts";
 import type { EngineStatus } from "../hooks/useImageEngine.ts";
+import type { VisionStatus } from "../hooks/useVisionStatus.ts";
 
 export type StatusTone = "info" | "warn" | "error";
 
@@ -17,6 +18,9 @@ interface StatusBarProps {
 	budget: BudgetStatus | null;
 	version: string;
 	message?: StatusMessage | null;
+	/** Vision CLI readiness — surfaced by builder-panes in task #4. */
+	visionStatus?: VisionStatus;
+	visionReason?: string | null;
 }
 
 const HINTS =
@@ -29,6 +33,8 @@ export function StatusBar({
 	budget,
 	version,
 	message,
+	visionStatus,
+	visionReason,
 }: StatusBarProps) {
 	const dotColor =
 		engineStatus === "up"
@@ -64,6 +70,8 @@ export function StatusBar({
 					<Text color={colors.warmParchment}>{modelName ?? "—"}</Text>
 					<Text color={colors.stoneGray}>{"    RATIO "}</Text>
 					<Text color={colors.warmParchment}>{aspectRatioLabel ?? "Auto"}</Text>
+					<Text color={colors.stoneGray}>{"    VISION "}</Text>
+					{renderVision(visionStatus, visionReason)}
 					<Text color={colors.stoneGray}>{"    BUDGET "}</Text>
 					{renderBudget(budget)}
 				</Text>
@@ -80,6 +88,20 @@ export function StatusBar({
 			</Box>
 		</Box>
 	);
+}
+
+function renderVision(
+	status: VisionStatus | undefined,
+	reason: string | null | undefined,
+) {
+	if (!status || status === "checking") {
+		return <Text color={colors.ashGray}>checking</Text>;
+	}
+	if (status === "ready") {
+		return <Text color={colors.warmParchment}>ready</Text>;
+	}
+	const label = reason ? `unavailable (${reason})` : "unavailable";
+	return <Text color={colors.mutedRust}>{label}</Text>;
 }
 
 function messageColor(tone: StatusTone): string {
@@ -107,16 +129,20 @@ function renderBudget(budget: BudgetStatus | null) {
 			? colors.mutedOchre
 			: colors.stoneGray;
 
-	const spent = budget.tokensSpent.toLocaleString();
-	const ceil = budget.tokenCeiling.toLocaleString();
+	const symbol = budget.currencySymbol ?? "$";
+	const spent = `${symbol}${budget.dollarsSpent.toFixed(2)}`;
+	const ceil = `${symbol}${budget.dollarsCeiling.toFixed(2)}`;
+	const remaining = `${symbol}${Math.max(0, budget.dollarsRemaining).toFixed(2)}`;
 
 	return (
 		<Text>
 			<Text color={numberColor}>{spent}</Text>
 			<Text color={colors.stoneGray}>{" / "}</Text>
 			<Text color={colors.ashGray}>{ceil}</Text>
-			<Text color={colors.stoneGray}>{" tokens "}</Text>
-			<Text color={pctColor}>({pct}%)</Text>
+			<Text color={colors.stoneGray}>{" (used "}</Text>
+			<Text color={pctColor}>{`${pct}%`}</Text>
+			<Text color={colors.stoneGray}>{") · remaining "}</Text>
+			<Text color={numberColor}>{remaining}</Text>
 		</Text>
 	);
 }

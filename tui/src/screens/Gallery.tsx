@@ -5,6 +5,7 @@ import { ImageThumb } from "../components/ImageThumb.tsx";
 import { Pill } from "../components/Pill.tsx";
 import { colors, caption } from "../theme.ts";
 import type { ImageRecord, ImageSource } from "../services/types.ts";
+import type { ReferenceIntent } from "../hooks/useReferences.ts";
 
 type CardProps = ComponentProps<typeof Card>;
 
@@ -12,6 +13,8 @@ interface GalleryProps {
 	references: ImageRecord[];
 	selectedIndex: number;
 	focused: boolean;
+	/** Optional per-ref intent map. Absent ids default to "generation". */
+	intentMap?: Map<string, ReferenceIntent>;
 	cardProps?: CardProps;
 }
 
@@ -21,13 +24,14 @@ const SOURCE_LABEL: Record<ImageSource, string> = {
 	"generation-copy": "generation",
 };
 
-const SELECTED_THUMB_COLS = 22;
-const SELECTED_THUMB_ROWS = 8;
+const SELECTED_THUMB_COLS = 30;
+const SELECTED_THUMB_ROWS = 12;
 
 export function Gallery({
 	references,
 	selectedIndex,
 	focused,
+	intentMap,
 	cardProps,
 }: GalleryProps) {
 	const selected = references[selectedIndex] ?? null;
@@ -51,6 +55,12 @@ export function Gallery({
 						const isSelected = i === selectedIndex;
 						const source = (ref.source ?? "upload") as ImageSource;
 						const label = SOURCE_LABEL[source] ?? source;
+						const intent = intentMap?.get(ref.id) ?? "generation";
+						const intentLabel = intent === "prompt-only" ? "draft" : "gen";
+						const intentColor =
+							intent === "prompt-only"
+								? colors.ashGray
+								: colors.warmParchment;
 						return (
 							<Box key={ref.id} flexDirection="column" marginBottom={1}>
 								<Box>
@@ -61,7 +71,7 @@ export function Gallery({
 												: colors.stoneGray
 										}
 									>
-										{isSelected ? "› " : "  "}
+										{isSelected ? "▶ " : "  "}
 										{tag}{" "}
 									</Text>
 									<Text
@@ -75,7 +85,11 @@ export function Gallery({
 									</Text>
 								</Box>
 								<Box marginLeft={2}>
-									<Text color={colors.linkGray}>{caption(label)}</Text>
+									<Text color={colors.linkGray}>
+										{caption(label)}
+									</Text>
+									<Text color={colors.stoneGray}>{"  "}</Text>
+									<Text color={intentColor}>{caption(intentLabel)}</Text>
 								</Box>
 							</Box>
 						);

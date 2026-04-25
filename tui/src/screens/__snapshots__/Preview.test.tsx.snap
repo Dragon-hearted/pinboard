@@ -1,0 +1,34 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`Preview renders 800-char prompt wrapped without 200-char truncation suffix 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│ PREVIEW                                                                                          │
+│ 1  /  1                                                                                          │
+│                                                                                                  │
+│ ┌────────────────────────┐                                                                       │
+│ │…                       │                                                                       │
+│ │                        │                                                                       │
+│ │                        │                                                                       │
+│ │                        │                                                                       │
+│ │                        │                                                                       │
+│ │                        │                                                                       │
+│ │                        │                                                                       │
+│ │                        │                                                                       │
+│ │                        │                                                                       │
+│ │                        │                                                                       │
+│ └────────────────────────┘                                                                       │
+│                                                                                                  │
+│ abcdef012345                                                                                     │
+│                                                                                                  │
+│ MODEL                                                                                            │
+│ gemini-3-pro-image-preview                                                                       │
+│                                                                                                  │
+│ PROMPT                                                                                           │
+│ lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor sit amet                 │
+│  lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor sit ame                 │
+│ t lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor sit am                 │
+│ et lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor sit a                 │
+│                                                                                                  │
+│ <CREATED stripped>"
+`;

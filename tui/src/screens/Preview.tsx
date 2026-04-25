@@ -15,11 +15,14 @@ interface PreviewProps {
 	lastError?: string | null;
 	focused?: boolean;
 	position?: { index: number; total: number } | null;
+	/** True when a newer generation exists than the one being viewed. */
+	hasFresher?: boolean;
 	cardProps?: CardProps;
 }
 
 const THUMB_COLS = 24;
 const THUMB_ROWS = 10;
+const PROMPT_MAX_LINES = 4;
 
 export function Preview({
 	generation,
@@ -27,6 +30,7 @@ export function Preview({
 	lastError,
 	focused,
 	position,
+	hasFresher,
 	cardProps,
 }: PreviewProps) {
 	return (
@@ -35,11 +39,19 @@ export function Preview({
 				<Text color={colors.ashGray}>{caption("Preview")}</Text>
 				{focused ? <Pill>focus</Pill> : null}
 			</Box>
-			{position && position.total > 1 ? (
+			{position ? (
 				<Box>
 					<Text color={colors.stoneGray}>
 						{caption(`${position.index + 1} / ${position.total}`)}
 					</Text>
+					{hasFresher ? (
+						<>
+							<Text color={colors.stoneGray}>{"  "}</Text>
+							<Text color={colors.warmParchment}>
+								{caption("↑ new")}
+							</Text>
+						</>
+					) : null}
 				</Box>
 			) : null}
 
@@ -50,31 +62,41 @@ export function Preview({
 					</Box>
 				) : generation ? (
 					<Box flexDirection="column">
-						<ImageThumb
-							path={generation.resultPath}
-							width={THUMB_COLS}
-							height={THUMB_ROWS}
-						/>
-						<Box marginTop={1}>
-							<Text color={colors.linkGray}>
-								{generation.id.slice(0, 12)}
-							</Text>
+						<Box flexShrink={0}>
+							<ImageThumb
+								path={generation.resultPath}
+								width={THUMB_COLS}
+								height={THUMB_ROWS}
+							/>
 						</Box>
-						<Box marginTop={1} flexDirection="column">
-							<Text color={colors.stoneGray}>{caption("Model")}</Text>
-							<Text color={colors.warmParchment}>{generation.model}</Text>
-						</Box>
-						<Box marginTop={1} flexDirection="column">
-							<Text color={colors.stoneGray}>{caption("Prompt")}</Text>
-							<Text color={colors.ashGray}>
-								{truncate(generation.prompt, 200)}
-							</Text>
-						</Box>
-						<Box marginTop={1} flexDirection="column">
-							<Text color={colors.stoneGray}>{caption("Created")}</Text>
-							<Text color={colors.ashGray}>
-								{formatDate(generation.createdAt)}
-							</Text>
+						<Box marginTop={1} flexDirection="column" flexShrink={1}>
+							<Box>
+								<Text color={colors.linkGray}>
+									{generation.id.slice(0, 12)}
+								</Text>
+							</Box>
+							<Box marginTop={1} flexDirection="column">
+								<Text color={colors.stoneGray}>{caption("Model")}</Text>
+								<Text color={colors.warmParchment}>
+									{generation.model}
+								</Text>
+							</Box>
+							<Box marginTop={1} flexDirection="column">
+								<Text color={colors.stoneGray}>
+									{caption("Prompt")}
+								</Text>
+								<Text color={colors.ashGray} wrap="wrap">
+									{clampLines(generation.prompt, PROMPT_MAX_LINES, 80)}
+								</Text>
+							</Box>
+							<Box marginTop={1} flexDirection="column">
+								<Text color={colors.stoneGray}>
+									{caption("Created")}
+								</Text>
+								<Text color={colors.ashGray}>
+									{formatDate(generation.createdAt)}
+								</Text>
+							</Box>
 						</Box>
 					</Box>
 				) : (
@@ -95,9 +117,21 @@ export function Preview({
 	);
 }
 
-function truncate(s: string, max: number): string {
-	if (s.length <= max) return s;
-	return `${s.slice(0, max - 1)}…`;
+/**
+ * Soft-wrap a long prompt to at most `maxLines` of approximately `colsPerLine`
+ * width. Returns the joined string with newline separators so Ink renders it
+ * as multiple lines without padding past the metadata column.
+ */
+function clampLines(s: string, maxLines: number, colsPerLine: number): string {
+	const trimmed = s.replace(/\s+/g, " ").trim();
+	if (trimmed.length === 0) return "";
+	const out: string[] = [];
+	let i = 0;
+	while (i < trimmed.length && out.length < maxLines) {
+		out.push(trimmed.slice(i, i + colsPerLine));
+		i += colsPerLine;
+	}
+	return out.join("\n");
 }
 
 function formatDate(iso: string): string {
