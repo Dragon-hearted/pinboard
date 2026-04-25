@@ -414,6 +414,48 @@ describe("enhancePrompt", () => {
 			enhancePrompt({ draft: "x", modelName: "NanoBanana Pro" }),
 		).rejects.toBeInstanceOf(ClaudeUnavailableError);
 	});
+
+	test("reuses probeAtStartup cache — does not respawn --version/--help on repeat calls", async () => {
+		installGuideMocks();
+		let versionCalls = 0;
+		let helpCalls = 0;
+		// Warm the cache exactly once with --version + --help, then serve four
+		// `claude -p ...` runs from a single sequence. If enhancePrompt bypasses
+		// the cache it will re-consume version/help stubs and our counters fail.
+		__setSpawn(
+			makeFakeSpawn([
+				() => {
+					versionCalls += 1;
+					return { stdout: "1.0.0" };
+				},
+				() => {
+					helpCalls += 1;
+					return { stdout: "Usage: claude --image <path>" };
+				},
+				() => ({ stdout: "out1" }),
+				() => ({ stdout: "out2" }),
+				() => ({ stdout: "out3" }),
+				() => ({ stdout: "out4" }),
+			]),
+		);
+
+		await probeAtStartup();
+		await enhancePrompt({ draft: "a", modelName: "NanoBanana Pro" });
+		await enhancePrompt({ draft: "b", modelName: "NanoBanana Pro" });
+		await enhancePrompt({
+			draft: "c",
+			modelName: "NanoBanana Pro",
+			imagePath: "/tmp/r.jpg",
+		});
+		await enhancePrompt({
+			draft: "d",
+			modelName: "NanoBanana Pro",
+			imagePath: "/tmp/r.jpg",
+		});
+
+		expect(versionCalls).toBe(1);
+		expect(helpCalls).toBe(1);
+	});
 });
 
 describe("probeAtStartup", () => {

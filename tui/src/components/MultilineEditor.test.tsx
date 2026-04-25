@@ -36,6 +36,8 @@ const END = "\x1b[F";
 const ESC = "\x1b";
 const ENTER = "\r";
 const SHIFT_ENTER = "\x1b\r";
+// Portable newline chord — Ctrl+J transmits LF (0x0a) on every VT terminal.
+const CTRL_J = "\n";
 // readline-style backspace is 0x7f
 const BACKSPACE = "\x7f";
 // ASCII delete-forward — most terminals send CSI 3~
@@ -183,6 +185,26 @@ describe("MultilineEditor", () => {
 			ui.stdin.write("Z");
 			await tick();
 			expect(lastChange(state)).toBe("abcZ");
+		} finally {
+			ui.unmount();
+		}
+	});
+
+	test("Ctrl+J inserts a newline (portable newline chord)", async () => {
+		const { state, ui } = mount();
+		try {
+			await tick();
+			ui.stdin.write("ab");
+			await tick();
+			ui.stdin.write(CTRL_J);
+			await tick();
+			ui.stdin.write("c");
+			await tick();
+			expect(lastChange(state)).toBe("ab\nc");
+			// Submit with Enter (\r) — must remain submit, not newline.
+			ui.stdin.write(ENTER);
+			await tick();
+			expect(state.submit).toContain("ab\nc");
 		} finally {
 			ui.unmount();
 		}

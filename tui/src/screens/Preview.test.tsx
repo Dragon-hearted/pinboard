@@ -84,6 +84,26 @@ describe("Preview", () => {
 		}
 	});
 
+	test("clamps to 4 visible lines and emits an ellipsis on overflow", () => {
+		const prompt = bigPrompt(2000);
+		const ui = render(
+			React.createElement(Preview, {
+				generation: makeGen(prompt),
+				inFlight: false,
+				position: { index: 0, total: 1 },
+			}),
+		);
+		try {
+			const frame = ui.lastFrame() ?? "";
+			// The clamp guarantees an ellipsis when the prompt does not fit
+			// within `PROMPT_MAX_LINES`. Without it, very long prompts would
+			// render indistinguishably from medium ones.
+			expect(frame).toMatch(/…/);
+		} finally {
+			ui.unmount();
+		}
+	});
+
 	test("renders an ↑ new indicator when hasFresher is true and index > 0", () => {
 		const ui = render(
 			React.createElement(Preview, {

@@ -21,7 +21,6 @@ const GROUPS: Group[] = [
 			{ key: "j / ↓", action: "Next ref (Gallery) or generation (Preview)" },
 			{ key: "k / ↑", action: "Previous ref (Gallery) or generation (Preview)" },
 			{ key: "End", action: "Jump to newest generation (Preview)" },
-			{ key: "Enter", action: "Focus prompt" },
 		],
 	},
 	{
@@ -31,7 +30,11 @@ const GROUPS: Group[] = [
 			{ key: "p", action: "Import Pinterest URL" },
 			{ key: "m", action: "Pick model" },
 			{ key: "r", action: "Pick aspect ratio" },
-			{ key: "Shift+Enter", action: "Insert newline in prompt editor" },
+			{ key: "Ctrl+J", action: "Insert newline in prompt editor (portable)" },
+			{
+				key: "Shift+Enter",
+				action: "Insert newline (kitty/wezterm/xterm w/ modifyOtherKeys only)",
+			},
 		],
 	},
 	{

@@ -30,7 +30,7 @@ describe("CommandHints", () => {
 		}
 	});
 
-	test("prompt focus lists Tab/Esc, Enter submit, Shift+Enter newline", () => {
+	test("prompt focus lists Tab/Esc, Enter submit, Ctrl+J newline", () => {
 		const ui = render(
 			React.createElement(CommandHints, { focus: "prompt" }),
 		);
@@ -40,7 +40,7 @@ describe("CommandHints", () => {
 			expect(frame).toMatch(/exit/);
 			expect(frame).toMatch(/Enter/);
 			expect(frame).toMatch(/submit/);
-			expect(frame).toMatch(/Shift\+Enter/);
+			expect(frame).toMatch(/Ctrl\+J/);
 			expect(frame).toMatch(/newline/);
 			expect(frame).toMatchSnapshot();
 		} finally {

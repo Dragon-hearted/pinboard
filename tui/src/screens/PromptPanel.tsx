@@ -113,7 +113,7 @@ export function PromptPanel({
 				<Text color={colors.stoneGray}>
 					{caption(
 						focused
-							? "Tab/Esc exit · Enter submit · Shift+Enter newline"
+							? "Tab/Esc exit · Enter submit · Ctrl+J newline"
 							: "g generate · v vision draft · Tab edit",
 					)}
 				</Text>

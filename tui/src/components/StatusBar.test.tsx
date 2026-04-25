@@ -83,4 +83,32 @@ describe("StatusBar budget rendering", () => {
 			ui.unmount();
 		}
 	});
+
+	// Regression for bug_005: image-engine producer (`budget-guard.ts`) emits
+	// only token/percentUsed fields, no dollar fields. Render must not throw.
+	test("renders token-based view when producer omits dollar fields", () => {
+		const producerShape = {
+			tokenCeiling: 1_000_000,
+			tokensSpent: 250_000,
+			tokensRemaining: 750_000,
+			percentUsed: 25,
+			isActive: true,
+		} as BudgetStatus;
+
+		const ui = render(
+			React.createElement(StatusBar, {
+				...baseProps,
+				budget: producerShape,
+			}),
+		);
+		try {
+			const frame = ui.lastFrame() ?? "";
+			expect(frame).toMatch(/used 25%/);
+			expect(frame).toMatch(/250\.0k(t)?/);
+			expect(frame).toMatch(/1\.0Mt/);
+			expect(frame).not.toMatch(/\$/);
+		} finally {
+			ui.unmount();
+		}
+	});
 });

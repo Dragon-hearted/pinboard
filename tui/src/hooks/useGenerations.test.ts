@@ -223,7 +223,7 @@ function makeStdin() {
 
 const tick = () => new Promise<void>((r) => setImmediate(r));
 
-describe("useGenerations.generate — reference intent split", () => {
+describe("useGenerations.generate — reference intent split (only gen refs sent to model)", () => {
 	let tmpDir: string;
 
 	beforeEach(() => {
@@ -238,7 +238,7 @@ describe("useGenerations.generate — reference intent split", () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("generationRefIds + promptOnlyRefIds both load into referenceImages and persist {generation, promptOnly} JSON", async () => {
+	test("only generationRefIds reach body.referenceImages; promptOnlyRefIds persist in JSON but stay off the wire", async () => {
 		const genBytes = new Uint8Array([1, 2, 3, 4]);
 		const promptBytes = new Uint8Array([9, 8, 7, 6]);
 		const genPath = join(tmpDir, "gen-ref.png");
@@ -327,12 +327,12 @@ describe("useGenerations.generate — reference intent split", () => {
 			expect(generateCall).toBeDefined();
 			const body = JSON.parse(String(generateCall?.body));
 			expect(body.referenceImages).toBeInstanceOf(Array);
-			expect(body.referenceImages).toHaveLength(2);
+			expect(body.referenceImages).toHaveLength(1);
 			const datas = body.referenceImages.map(
 				(r: { data: string }) => r.data,
 			);
 			expect(datas).toContain(Buffer.from(genBytes).toString("base64"));
-			expect(datas).toContain(Buffer.from(promptBytes).toString("base64"));
+			expect(datas).not.toContain(Buffer.from(promptBytes).toString("base64"));
 
 			const persisted = getGeneration("gen-split");
 			expect(persisted).not.toBeNull();

@@ -129,11 +129,39 @@ function renderBudget(budget: BudgetStatus | null) {
 			? colors.mutedOchre
 			: colors.stoneGray;
 
-	const symbol = budget.currencySymbol ?? "$";
-	const spent = `${symbol}${budget.dollarsSpent.toFixed(2)}`;
-	const ceil = `${symbol}${budget.dollarsCeiling.toFixed(2)}`;
-	const remaining = `${symbol}${Math.max(0, budget.dollarsRemaining).toFixed(2)}`;
+	// Producer (image-engine) does not always emit dollar fields; fall back to
+	// a token-based view so the bar still renders.
+	const hasDollars =
+		typeof budget.dollarsSpent === "number" &&
+		typeof budget.dollarsCeiling === "number";
 
+	if (hasDollars) {
+		const symbol = budget.currencySymbol ?? "$";
+		const spent = `${symbol}${(budget.dollarsSpent ?? 0).toFixed(2)}`;
+		const ceil = `${symbol}${(budget.dollarsCeiling ?? 0).toFixed(2)}`;
+		const remaining = `${symbol}${Math.max(0, budget.dollarsRemaining ?? 0).toFixed(2)}`;
+		return (
+			<Text>
+				<Text color={numberColor}>{spent}</Text>
+				<Text color={colors.stoneGray}>{" / "}</Text>
+				<Text color={colors.ashGray}>{ceil}</Text>
+				<Text color={colors.stoneGray}>{" (used "}</Text>
+				<Text color={pctColor}>{`${pct}%`}</Text>
+				<Text color={colors.stoneGray}>{") · remaining "}</Text>
+				<Text color={numberColor}>{remaining}</Text>
+			</Text>
+		);
+	}
+
+	const fmt = (n: number) =>
+		n >= 1_000_000
+			? `${(n / 1_000_000).toFixed(1)}M`
+			: n >= 1_000
+				? `${(n / 1_000).toFixed(1)}k`
+				: String(n);
+	const spent = `${fmt(budget.tokensSpent)}t`;
+	const ceil = `${fmt(budget.tokenCeiling)}t`;
+	const remaining = `${fmt(Math.max(0, budget.tokensRemaining))}t`;
 	return (
 		<Text>
 			<Text color={numberColor}>{spent}</Text>

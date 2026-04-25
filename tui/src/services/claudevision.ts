@@ -250,19 +250,23 @@ export async function enhancePrompt(opts: EnhancePromptOpts): Promise<string> {
 	const binary = opts.binary ?? "claude";
 	const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
+	// Reuse the module-scope cached probe so repeated `w` presses do not respawn
+	// `claude --version` / `--help`. The custom binary path opts out of the
+	// cache because the cache is keyed on the default binary at startup.
+	const probe =
+		opts.binary && opts.binary !== "claude"
+			? await probeClaudeCli(binary)
+			: await probeAtStartup(binary);
+	if (!probe.available) throw new ClaudeUnavailableError();
+
 	let attachFlag: ImageAttachFlag | null = null;
 	if (opts.imagePath) {
-		const probe = await probeClaudeCli(binary);
-		if (!probe.available) throw new ClaudeUnavailableError();
 		attachFlag = probe.imageAttachFlag;
 		if (!attachFlag) {
 			throw new ClaudeUnavailableError(
 				"claude CLI is installed but does not expose a supported image-attach flag (--image / --attach / @path)",
 			);
 		}
-	} else {
-		const probe = await probeClaudeCli(binary);
-		if (!probe.available) throw new ClaudeUnavailableError();
 	}
 
 	const guide = await loadModelGuide(opts.modelName).catch(() => null);

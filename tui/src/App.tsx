@@ -252,7 +252,12 @@ export function App() {
 
 	const pinned = usePinnedGenIndex({
 		generations: gens.generations,
-		onNewer: () => flash("New generation ready — press End to jump", "info", 2500),
+		onNewer: () =>
+			flash(
+				"New generation ready — Tab → preview, then End to jump",
+				"info",
+				2500,
+			),
 	});
 	const { genIndex, jumpToNewest, stepForward, stepBack } = pinned;
 

@@ -83,10 +83,13 @@ export interface BudgetStatus {
 	tokensRemaining: number;
 	percentUsed: number;
 	isActive: boolean;
-	dollarsCeiling: number;
-	dollarsSpent: number;
-	dollarsRemaining: number;
-	currencySymbol: string;
+	// Dollar fields are optional: the image-engine producer currently emits only
+	// token/percentUsed metrics. StatusBar falls back to a token-based display
+	// when these are absent so the TUI does not crash.
+	dollarsCeiling?: number;
+	dollarsSpent?: number;
+	dollarsRemaining?: number;
+	currencySymbol?: string;
 	wisGateBalance?: {
 		available_balance: number;
 		package_balance: number;

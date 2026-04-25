@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useStdout } from "ink";
 import { Spinner } from "@inkjs/ui";
 import { Card } from "../components/Card.tsx";
 import { ImageThumb } from "../components/ImageThumb.tsx";
@@ -23,6 +23,12 @@ interface PreviewProps {
 const THUMB_COLS = 24;
 const THUMB_ROWS = 10;
 const PROMPT_MAX_LINES = 4;
+// Preview occupies ~60% of the terminal (Gallery is 40%). Card/Box paddings
+// shave a few cells off — empirically ~8 cells of total horizontal chrome.
+// Floor at 20 so very narrow terminals still produce a usable break width.
+const PREVIEW_WIDTH_FRACTION = 0.6;
+const PREVIEW_CHROME_COLS = 8;
+const MIN_PROMPT_COLS = 20;
 
 export function Preview({
 	generation,
@@ -33,6 +39,12 @@ export function Preview({
 	hasFresher,
 	cardProps,
 }: PreviewProps) {
+	const { stdout } = useStdout();
+	const termCols = stdout?.columns ?? 80;
+	const promptCols = Math.max(
+		MIN_PROMPT_COLS,
+		Math.floor(termCols * PREVIEW_WIDTH_FRACTION) - PREVIEW_CHROME_COLS,
+	);
 	return (
 		<Card {...cardProps}>
 			<Box justifyContent="space-between">
@@ -86,7 +98,11 @@ export function Preview({
 									{caption("Prompt")}
 								</Text>
 								<Text color={colors.ashGray} wrap="wrap">
-									{clampLines(generation.prompt, PROMPT_MAX_LINES, 80)}
+									{clampLines(
+										generation.prompt,
+										PROMPT_MAX_LINES,
+										promptCols,
+									)}
 								</Text>
 							</Box>
 							<Box marginTop={1} flexDirection="column">
@@ -130,6 +146,11 @@ function clampLines(s: string, maxLines: number, colsPerLine: number): string {
 	while (i < trimmed.length && out.length < maxLines) {
 		out.push(trimmed.slice(i, i + colsPerLine));
 		i += colsPerLine;
+	}
+	if (i < trimmed.length && out.length > 0) {
+		const last = out[out.length - 1] ?? "";
+		out[out.length - 1] =
+			last.length > 0 ? `${last.slice(0, Math.max(0, last.length - 1))}…` : "…";
 	}
 	return out.join("\n");
 }

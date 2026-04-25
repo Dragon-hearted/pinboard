@@ -24,7 +24,7 @@ const HINTS: Record<FocusId, Chord[]> = {
 	prompt: [
 		{ key: "Tab/Esc", label: "exit" },
 		{ key: "Enter", label: "submit" },
-		{ key: "Shift+Enter", label: "newline" },
+		{ key: "Ctrl+J", label: "newline" },
 	],
 	preview: [
 		{ key: "j/k", label: "history" },

@@ -192,18 +192,29 @@ export function MultilineEditor({
 				onCancel?.();
 				return;
 			}
+			// Newline (portable): Ctrl+J transmits LF (\n) as a distinct byte
+			// from CR on every VT-style terminal regardless of "modify-other-keys"
+			// settings. This is the recommended chord — Shift+Enter is unreliable
+			// on default Apple Terminal, gnome-terminal, default iTerm2, and tmux
+			// without extended-keys, where it sends plain \r identical to Enter.
+			if (input === "\n" || (key.ctrl && input === "j")) {
+				newline();
+				return;
+			}
 			if (key.return) {
-				if (key.shift) {
+				// Shift+Enter for newline only fires on terminals that send a
+				// distinguishable sequence (kitty, wezterm, xterm modifyOtherKeys=2).
+				// Kept as a bonus path — Ctrl+J is the documented affordance.
+				if (key.shift || key.meta) {
 					newline();
 					return;
 				}
 				onSubmit?.(linesRef.current.join("\n"));
 				return;
 			}
-			// Terminals can't reliably send a distinct Shift+Enter sequence.
 			// Convention: \x1b\r (Alt+Enter / "modify-other-keys" CR) inserts a
 			// newline. ink strips the leading ESC, so we see input='\r' with
-			// key.return=false — that branch is our newline trigger.
+			// key.return=false — kept as an additional fallback.
 			if (input === "\r" && !key.return) {
 				newline();
 				return;
