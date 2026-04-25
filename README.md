@@ -2,7 +2,7 @@
 
 ![Pinboard](images/hero.svg)
 
-### Terminal-first reference board and AI image generator (Ink TUI) — Pinterest URL import, ImageEngine generation, PromptWriter per-model prompt formatting, Claude Code vision tagging
+### Terminal-first reference board with built-in AI image generation
 
 ![Status](https://img.shields.io/badge/Status-active-brightgreen)
 
