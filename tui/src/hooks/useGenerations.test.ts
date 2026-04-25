@@ -1,14 +1,21 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { __resetDb, initDb, insertImage } from "../services/db";
+import React from "react";
+import { render } from "ink";
+import { __resetDb, getGeneration, initDb, insertImage } from "../services/db";
 import {
 	__setFetch,
 	generate as engineGenerate,
 	IMAGE_ENGINE_URL,
 } from "../services/imageengine";
-import { loadReferenceImages } from "./useGenerations";
+import {
+	loadReferenceImages,
+	useGenerations,
+	type UseGenerationsApi,
+} from "./useGenerations";
 
 type FetchArgs = { url: string; init?: RequestInit };
 
@@ -189,5 +196,153 @@ describe("useGenerations ref loading", () => {
 		);
 		expect(body.referenceImages[0].mimeType).toBe("image/png");
 		expect(body.referenceImageIds).toBeUndefined();
+	});
+});
+
+function makeStdin() {
+	const emitter = new EventEmitter() as EventEmitter & {
+		isTTY: boolean;
+		setRawMode: (v: boolean) => void;
+		setEncoding: (enc: string) => void;
+		resume: () => void;
+		pause: () => void;
+		read: () => string | null;
+		ref: () => void;
+		unref: () => void;
+	};
+	emitter.isTTY = true;
+	emitter.setRawMode = () => {};
+	emitter.setEncoding = () => {};
+	emitter.resume = () => {};
+	emitter.pause = () => {};
+	emitter.read = () => null;
+	emitter.ref = () => {};
+	emitter.unref = () => {};
+	return emitter;
+}
+
+const tick = () => new Promise<void>((r) => setImmediate(r));
+
+describe("useGenerations.generate — reference intent split", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		__resetDb();
+		initDb(":memory:");
+		tmpDir = mkdtempSync(join(tmpdir(), "pinboard-gen-test-"));
+	});
+
+	afterEach(() => {
+		__resetDb();
+		__setFetch(null);
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("generationRefIds + promptOnlyRefIds both load into referenceImages and persist {generation, promptOnly} JSON", async () => {
+		const genBytes = new Uint8Array([1, 2, 3, 4]);
+		const promptBytes = new Uint8Array([9, 8, 7, 6]);
+		const genPath = join(tmpDir, "gen-ref.png");
+		const promptPath = join(tmpDir, "prompt-ref.png");
+		writeFileSync(genPath, genBytes);
+		writeFileSync(promptPath, promptBytes);
+
+		insertImage({
+			id: "gen-ref-id",
+			filename: "gen-ref.png",
+			originalName: "gen-ref.png",
+			path: genPath,
+			mimeType: "image/png",
+			size: genBytes.length,
+			createdAt: "2026-04-18T00:00:00Z",
+		});
+		insertImage({
+			id: "prompt-ref-id",
+			filename: "prompt-ref.png",
+			originalName: "prompt-ref.png",
+			path: promptPath,
+			mimeType: "image/png",
+			size: promptBytes.length,
+			createdAt: "2026-04-18T00:00:01Z",
+		});
+
+		const calls: { url: string; body?: string }[] = [];
+		const generatedBytes = Buffer.from([0xab, 0xcd, 0xef]);
+		const fetchImpl = (async (
+			input: URL | RequestInfo,
+			init?: RequestInit,
+		): Promise<Response> => {
+			const url = typeof input === "string" ? input : (input as Request).url;
+			calls.push({ url, body: init?.body as string | undefined });
+			if (url.endsWith("/api/generate")) {
+				return jsonResponse({
+					id: "gen-split",
+					imageUrl: "/api/gallery/gen-split/image",
+					model: "gemini-3-pro-image-preview",
+					prompt: "p",
+					tokenUsage: {
+						promptTokens: 1,
+						candidateTokens: 2,
+						totalTokens: 3,
+					},
+					createdAt: "2026-04-18T00:01:00Z",
+				});
+			}
+			if (url.endsWith("/api/gallery/gen-split/image")) {
+				return new Response(generatedBytes, { status: 200 });
+			}
+			return new Response("not found", { status: 404 });
+		}) as unknown as typeof fetch;
+		__setFetch(fetchImpl);
+
+		const apiRef: { current: UseGenerationsApi | null } = { current: null };
+		function Probe() {
+			apiRef.current = useGenerations();
+			return null;
+		}
+		const stdin = makeStdin();
+		const instance = render(React.createElement(Probe), {
+			stdin: stdin as unknown as NodeJS.ReadStream,
+			stdout: process.stdout,
+			stderr: process.stderr,
+			debug: false,
+			exitOnCtrlC: false,
+			patchConsole: false,
+		});
+
+		try {
+			await tick();
+			expect(apiRef.current).not.toBeNull();
+
+			const record = await apiRef.current!.generate({
+				prompt: "p",
+				modelId: "gemini-3-pro-image-preview",
+				generationRefIds: ["gen-ref-id"],
+				promptOnlyRefIds: ["prompt-ref-id"],
+			});
+
+			expect(record).not.toBeNull();
+			expect(record?.id).toBe("gen-split");
+
+			const generateCall = calls.find((c) => c.url.endsWith("/api/generate"));
+			expect(generateCall).toBeDefined();
+			const body = JSON.parse(String(generateCall?.body));
+			expect(body.referenceImages).toBeInstanceOf(Array);
+			expect(body.referenceImages).toHaveLength(2);
+			const datas = body.referenceImages.map(
+				(r: { data: string }) => r.data,
+			);
+			expect(datas).toContain(Buffer.from(genBytes).toString("base64"));
+			expect(datas).toContain(Buffer.from(promptBytes).toString("base64"));
+
+			const persisted = getGeneration("gen-split");
+			expect(persisted).not.toBeNull();
+			const refsParsed = JSON.parse(persisted!.referenceImageIds);
+			expect(refsParsed).toEqual({
+				generation: ["gen-ref-id"],
+				promptOnly: ["prompt-ref-id"],
+			});
+		} finally {
+			instance.unmount();
+		}
 	});
 });

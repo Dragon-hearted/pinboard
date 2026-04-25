@@ -3,11 +3,18 @@ import {
 	ClaudeError,
 	ClaudeTimeoutError,
 	ClaudeUnavailableError,
+	__resetProbeCache,
 	__setSpawn,
 	detectImageAttachFlag,
 	draftPrompt,
+	enhancePrompt,
+	probeAtStartup,
 	probeClaudeCli,
 } from "./claudevision";
+import {
+	__setFileReader,
+	__setRegistryLoader,
+} from "./promptwriter";
 
 interface FakeProcOpts {
 	stdout?: string;
@@ -55,7 +62,47 @@ function makeFakeSpawn(responders: Array<(cmd: string[]) => FakeProcOpts>) {
 	};
 }
 
-afterEach(() => __setSpawn(null));
+afterEach(() => {
+	__setSpawn(null);
+	__resetProbeCache();
+	__setRegistryLoader(null);
+	__setFileReader(null);
+});
+
+const FAKE_REGISTRY_FOR_VISION = [
+	{
+		model: "NanoBanana Pro",
+		provider: "Google (Gemini)",
+		status: "production",
+		type: "image" as const,
+		file: "image/nanobanana-pro.md",
+	},
+];
+
+const NANOBANANA_GUIDE_MD = `---
+model: "nanobanana-pro"
+---
+
+# NanoBanana Pro
+
+## Constraints
+
+| Constraint | Limit | Notes |
+|------------|-------|-------|
+| Max prompt length | 8,192 chars | |
+
+## Prompt Structure
+
+Use system instruction + body. Lead with subject and lighting.
+`;
+
+function installGuideMocks() {
+	__setRegistryLoader(async () => FAKE_REGISTRY_FOR_VISION);
+	__setFileReader(async (path) => {
+		if (path.endsWith("nanobanana-pro.md")) return NANOBANANA_GUIDE_MD;
+		throw new Error(`unexpected read: ${path}`);
+	});
+}
 
 describe("detectImageAttachFlag", () => {
 	test("detects --image flag", () => {
@@ -279,5 +326,144 @@ describe("draftPrompt", () => {
 		await expect(
 			draftPrompt({ imagePath: "/tmp/x.jpg" }),
 		).rejects.toBeInstanceOf(ClaudeUnavailableError);
+	});
+});
+
+describe("enhancePrompt", () => {
+	test("composes instruction with promptStructure section + user draft", async () => {
+		installGuideMocks();
+		let capturedPrompt = "";
+		__setSpawn(
+			makeFakeSpawn([
+				() => ({ stdout: "1.0.0" }),
+				() => ({ stdout: "Usage: claude --image <path>" }),
+				(cmd) => {
+					expect(cmd[0]).toBe("claude");
+					expect(cmd[1]).toBe("-p");
+					capturedPrompt = cmd[2] ?? "";
+					expect(cmd).toContain("--image");
+					expect(cmd).toContain("/tmp/ref.jpg");
+					return { stdout: "  enriched prompt body  \n" };
+				},
+			]),
+		);
+		const out = await enhancePrompt({
+			draft: "a cat on a sofa",
+			modelName: "NanoBanana Pro",
+			imagePath: "/tmp/ref.jpg",
+		});
+		expect(out).toBe("enriched prompt body");
+		expect(capturedPrompt).toContain("Use system instruction + body");
+		expect(capturedPrompt).toContain("Lead with subject and lighting");
+		expect(capturedPrompt).toContain("User draft:");
+		expect(capturedPrompt).toContain("a cat on a sofa");
+	});
+
+	test("works without imagePath (text-only enrichment)", async () => {
+		installGuideMocks();
+		__setSpawn(
+			makeFakeSpawn([
+				() => ({ stdout: "1.0.0" }),
+				() => ({ stdout: "Usage: claude --image <path>" }),
+				(cmd) => {
+					expect(cmd).not.toContain("--image");
+					expect(cmd).not.toContain("--attach");
+					return { stdout: "text-only enriched" };
+				},
+			]),
+		);
+		const out = await enhancePrompt({
+			draft: "draft body",
+			modelName: "NanoBanana Pro",
+		});
+		expect(out).toBe("text-only enriched");
+	});
+
+	test("@path flag embeds reference inside instruction text", async () => {
+		installGuideMocks();
+		__setSpawn(
+			makeFakeSpawn([
+				() => ({ stdout: "1.0.0" }),
+				() => ({ stdout: "Use @<path> to reference a file" }),
+				(cmd) => {
+					expect(cmd[0]).toBe("claude");
+					expect(cmd[1]).toBe("-p");
+					expect(cmd[2]).toContain("@/tmp/ref.jpg");
+					expect(cmd).not.toContain("--image");
+					return { stdout: "ok" };
+				},
+			]),
+		);
+		await enhancePrompt({
+			draft: "x",
+			modelName: "NanoBanana Pro",
+			imagePath: "/tmp/ref.jpg",
+		});
+	});
+
+	test("throws ClaudeUnavailableError when probe says unavailable", async () => {
+		installGuideMocks();
+		__setSpawn(
+			makeFakeSpawn([
+				() => ({
+					spawnThrows: Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+				}),
+			]),
+		);
+		await expect(
+			enhancePrompt({ draft: "x", modelName: "NanoBanana Pro" }),
+		).rejects.toBeInstanceOf(ClaudeUnavailableError);
+	});
+});
+
+describe("probeAtStartup", () => {
+	test("caches across calls — only one --version spawn", async () => {
+		let versionCalls = 0;
+		__setSpawn(
+			makeFakeSpawn([
+				() => {
+					versionCalls += 1;
+					return { stdout: "1.0.0" };
+				},
+				() => ({ stdout: "Usage: claude --image <path>" }),
+				() => {
+					versionCalls += 1;
+					return { stdout: "should not happen" };
+				},
+			]),
+		);
+
+		const r1 = await probeAtStartup();
+		const r2 = await probeAtStartup();
+		const r3 = await probeAtStartup();
+
+		expect(versionCalls).toBe(1);
+		expect(r1).toBe(r2);
+		expect(r2).toBe(r3);
+		expect(r1.available).toBe(true);
+		expect(r1.imageAttachFlag).toBe("--image");
+	});
+
+	test("re-probes after __resetProbeCache()", async () => {
+		let versionCalls = 0;
+		__setSpawn(
+			makeFakeSpawn([
+				() => {
+					versionCalls += 1;
+					return { stdout: "1.0.0" };
+				},
+				() => ({ stdout: "Usage: claude --image <path>" }),
+				() => {
+					versionCalls += 1;
+					return { stdout: "1.0.0" };
+				},
+				() => ({ stdout: "Usage: claude --image <path>" }),
+			]),
+		);
+
+		await probeAtStartup();
+		__resetProbeCache();
+		await probeAtStartup();
+		expect(versionCalls).toBe(2);
 	});
 });

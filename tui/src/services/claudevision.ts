@@ -4,6 +4,8 @@
  * Claude API calls by leveraging the Claude Code subscription.
  */
 
+import { loadModelGuide } from "./promptwriter";
+
 /** How the detected `claude` CLI accepts an image argument. */
 export type ImageAttachFlag = "--image" | "--attach" | "@path";
 
@@ -53,6 +55,9 @@ export class ClaudeError extends Error {
 
 const DRAFT_PROMPT_INSTRUCTION =
 	"Analyze this image. Write a concise image-generation prompt (subject, lighting, composition, mood, style). Output ONLY the prompt text, no preamble.";
+
+const ENHANCE_PROMPT_INSTRUCTION =
+	"Rewrite the user's draft below into a high-quality image-generation prompt that follows the model's prompt-structure guide. Output ONLY the rewritten prompt text, no preamble.";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -226,4 +231,111 @@ export async function draftPrompt(opts: DraftPromptOpts): Promise<string> {
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+export interface EnhancePromptOpts {
+	draft: string;
+	modelName: string;
+	imagePath?: string;
+	timeoutMs?: number;
+	binary?: string;
+}
+
+/**
+ * Enrich a user's draft prompt by shelling out to `claude -p` with the model
+ * guide's `Prompt Structure` section as the leading instruction. The optional
+ * `imagePath` is attached using the same flag detection as `draftPrompt`.
+ */
+export async function enhancePrompt(opts: EnhancePromptOpts): Promise<string> {
+	const binary = opts.binary ?? "claude";
+	const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+	let attachFlag: ImageAttachFlag | null = null;
+	if (opts.imagePath) {
+		const probe = await probeClaudeCli(binary);
+		if (!probe.available) throw new ClaudeUnavailableError();
+		attachFlag = probe.imageAttachFlag;
+		if (!attachFlag) {
+			throw new ClaudeUnavailableError(
+				"claude CLI is installed but does not expose a supported image-attach flag (--image / --attach / @path)",
+			);
+		}
+	} else {
+		const probe = await probeClaudeCli(binary);
+		if (!probe.available) throw new ClaudeUnavailableError();
+	}
+
+	const guide = await loadModelGuide(opts.modelName).catch(() => null);
+	const promptStructure = guide?.sections.promptStructure ?? "";
+	const instruction = `${promptStructure}\n\n${ENHANCE_PROMPT_INSTRUCTION}\n\nUser draft:\n${opts.draft}`;
+
+	const args: string[] = ["-p"];
+	if (opts.imagePath && attachFlag === "@path") {
+		args.push(`${instruction} @${opts.imagePath}`);
+	} else if (opts.imagePath && attachFlag) {
+		args.push(instruction, attachFlag, opts.imagePath);
+	} else {
+		args.push(instruction);
+	}
+
+	let proc: SubprocessLike;
+	try {
+		proc = spawnImpl([binary, ...args], {
+			stdout: "pipe",
+			stderr: "pipe",
+			stdin: "ignore",
+		});
+	} catch (err) {
+		const msg = (err as Error)?.message ?? String(err);
+		if (/ENOENT/i.test(msg) || /not found/i.test(msg)) {
+			throw new ClaudeUnavailableError();
+		}
+		throw err;
+	}
+
+	let timedOut = false;
+	const timer = setTimeout(() => {
+		timedOut = true;
+		try {
+			proc.kill("SIGKILL");
+		} catch {
+			// process already exited
+		}
+	}, timeoutMs);
+
+	try {
+		const [stdout, stderr, code] = await Promise.all([
+			streamToString(proc.stdout),
+			streamToString(proc.stderr),
+			proc.exited,
+		]);
+		if (timedOut) throw new ClaudeTimeoutError(timeoutMs);
+		if (code !== 0) {
+			throw new ClaudeError(
+				`claude CLI exited with code ${code}: ${stderr.trim() || "<no stderr>"}`,
+				code,
+				stderr,
+			);
+		}
+		return stdout.trim();
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/** Module-scope cache for `probeAtStartup`. Cleared by `__resetProbeCache`. */
+let probeCache: Promise<ProbeResult> | null = null;
+
+/**
+ * Probe the `claude` CLI exactly once per process. Subsequent calls return the
+ * cached `ProbeResult` without re-spawning `claude --version`.
+ */
+export function probeAtStartup(binary = "claude"): Promise<ProbeResult> {
+	if (!probeCache) probeCache = probeClaudeCli(binary);
+	return probeCache;
+}
+
+/** Test hook — clear the cached probe so the next `probeAtStartup` re-runs. */
+export function __resetProbeCache(): void {
+	probeCache = null;
 }

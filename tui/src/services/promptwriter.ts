@@ -6,6 +6,7 @@
 import { resolve } from "node:path";
 import { listModels as registryListModels } from "../../../../prompt-writer/src/registry";
 import type { ModelEntry } from "../../../../prompt-writer/src/registry";
+import * as claudevision from "./claudevision";
 import type { WisGateModel } from "./types";
 
 const KNOWLEDGE_DIR = resolve(
@@ -246,4 +247,36 @@ export async function validatePromptForModel(
 	}
 
 	return { ok: errors.length === 0, warnings, errors };
+}
+
+export interface EnrichWithGuideOpts {
+	imagePath?: string;
+	timeoutMs?: number;
+	binary?: string;
+}
+
+/**
+ * Rewrite a draft prompt through `claudevision.enhancePrompt`, supplying the
+ * model guide's prompt-structure section. Falls back to the deterministic
+ * `applyTemplate` formatter when the `claude` CLI is unavailable.
+ */
+export async function enrichWithGuide(
+	draft: string,
+	modelName: string,
+	opts: EnrichWithGuideOpts = {},
+): Promise<string> {
+	try {
+		return await claudevision.enhancePrompt({
+			draft,
+			modelName,
+			imagePath: opts.imagePath,
+			timeoutMs: opts.timeoutMs,
+			binary: opts.binary,
+		});
+	} catch (err) {
+		if (err instanceof claudevision.ClaudeUnavailableError) {
+			return applyTemplate(draft, modelName);
+		}
+		throw err;
+	}
 }

@@ -83,6 +83,10 @@ export interface BudgetStatus {
 	tokensRemaining: number;
 	percentUsed: number;
 	isActive: boolean;
+	dollarsCeiling: number;
+	dollarsSpent: number;
+	dollarsRemaining: number;
+	currencySymbol: string;
 	wisGateBalance?: {
 		available_balance: number;
 		package_balance: number;

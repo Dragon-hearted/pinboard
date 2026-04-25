@@ -8,7 +8,7 @@ import { Database } from "bun:sqlite";
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { DOWNLOADS_DIR, UPLOADS_DIR } from "./paths";
-import type { GenerationRecord, ImageRecord } from "./types";
+import type { GenerationRecord, ImageRecord, ImageSource } from "./types";
 
 const DEFAULT_DB_PATH = resolve(
 	import.meta.dir,
@@ -221,6 +221,32 @@ export function deleteAllImages(): { rows: number; files: number } {
 		}
 	}
 	d.exec("DELETE FROM images");
+	return { rows: rows.length, files };
+}
+
+/**
+ * Delete `images` rows whose `source` matches the supplied filter and unlink
+ * each backing file. Mirrors `deleteAllImages` but scoped to one source.
+ */
+export function deleteImagesBySource(
+	source: ImageSource,
+): { rows: number; files: number } {
+	const d = db();
+	const rows = d
+		.prepare("SELECT path FROM images WHERE source = ?")
+		.all(source) as { path: string }[];
+	let files = 0;
+	for (const r of rows) {
+		if (r.path && existsSync(r.path)) {
+			try {
+				unlinkSync(r.path);
+				files += 1;
+			} catch {
+				// already gone — ignore
+			}
+		}
+	}
+	d.prepare("DELETE FROM images WHERE source = ?").run(source);
 	return { rows: rows.length, files };
 }
 

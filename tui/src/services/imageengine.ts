@@ -4,7 +4,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import type {
 	BatchRequest,
 	BatchResult,
@@ -20,6 +20,7 @@ const IMAGE_ENGINE_ENTRY = resolve(
 	import.meta.dir,
 	"../../../../image-engine/src/index.ts",
 );
+const IMAGE_ENGINE_CWD = dirname(dirname(IMAGE_ENGINE_ENTRY));
 
 export class ImageEngineError extends Error {
 	constructor(
@@ -98,6 +99,7 @@ export async function ensureUp(
 	if (await healthCheck()) return;
 
 	const child = spawn("bun", ["run", IMAGE_ENGINE_ENTRY], {
+		cwd: IMAGE_ENGINE_CWD,
 		detached: true,
 		stdio: opts.silent ? "ignore" : ["ignore", "ignore", "ignore"],
 	});

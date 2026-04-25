@@ -27,11 +27,17 @@ function ensureUploadsDir(): string {
 	return UPLOADS_DIR;
 }
 
+export type ReferenceIntent = "generation" | "prompt-only";
+
 export interface UseReferencesApi {
 	references: ImageRecord[];
 	selectedIndex: number;
 	loading: boolean;
 	error: string | null;
+	intentMap: Map<string, ReferenceIntent>;
+	getIntent(id: string): ReferenceIntent;
+	setIntent(id: string, intent: ReferenceIntent): void;
+	toggleIntent(id: string): ReferenceIntent;
 	select(i: number): void;
 	selectDelta(delta: number): void;
 	refresh(): void;
@@ -47,12 +53,26 @@ export function useReferences(): UseReferencesApi {
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [intentMap, setIntentMap] = useState<Map<string, ReferenceIntent>>(
+		() => new Map(),
+	);
 
 	const refresh = useCallback(() => {
 		try {
 			const rows = db.listImages();
 			setReferences(rows);
 			setSelectedIndex((i) => Math.min(i, Math.max(0, rows.length - 1)));
+			setIntentMap((prev) => {
+				if (prev.size === 0) return prev;
+				const live = new Set(rows.map((r) => r.id));
+				let changed = false;
+				const next = new Map<string, ReferenceIntent>();
+				for (const [id, v] of prev) {
+					if (live.has(id)) next.set(id, v);
+					else changed = true;
+				}
+				return changed ? next : prev;
+			});
 			setError(null);
 		} catch (e) {
 			setError((e as Error).message);
@@ -64,6 +84,40 @@ export function useReferences(): UseReferencesApi {
 	useEffect(() => {
 		refresh();
 	}, [refresh]);
+
+	const getIntent = useCallback(
+		(id: string): ReferenceIntent => intentMap.get(id) ?? "generation",
+		[intentMap],
+	);
+
+	const setIntent = useCallback(
+		(id: string, intent: ReferenceIntent): void => {
+			setIntentMap((prev) => {
+				if (intent === "generation") {
+					if (!prev.has(id)) return prev;
+					const next = new Map(prev);
+					next.delete(id);
+					return next;
+				}
+				if (prev.get(id) === intent) return prev;
+				const next = new Map(prev);
+				next.set(id, intent);
+				return next;
+			});
+		},
+		[],
+	);
+
+	const toggleIntent = useCallback(
+		(id: string): ReferenceIntent => {
+			const current = intentMap.get(id) ?? "generation";
+			const next: ReferenceIntent =
+				current === "generation" ? "prompt-only" : "generation";
+			setIntent(id, next);
+			return next;
+		},
+		[intentMap, setIntent],
+	);
 
 	const select = useCallback((i: number) => {
 		setSelectedIndex((prev) => {
@@ -167,6 +221,12 @@ export function useReferences(): UseReferencesApi {
 	const remove = useCallback(
 		(id: string) => {
 			db.deleteImage(id);
+			setIntentMap((prev) => {
+				if (!prev.has(id)) return prev;
+				const next = new Map(prev);
+				next.delete(id);
+				return next;
+			});
 			refresh();
 		},
 		[refresh],
@@ -185,6 +245,10 @@ export function useReferences(): UseReferencesApi {
 		selectedIndex,
 		loading,
 		error,
+		intentMap,
+		getIntent,
+		setIntent,
+		toggleIntent,
 		select,
 		selectDelta,
 		refresh,
