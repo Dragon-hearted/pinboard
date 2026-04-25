@@ -1,8 +1,9 @@
 import type { ComponentProps } from "react";
 import { Box, Text } from "ink";
-import { TextInput, Spinner } from "@inkjs/ui";
+import { Spinner } from "@inkjs/ui";
 import { Card } from "../components/Card.tsx";
 import { Pill } from "../components/Pill.tsx";
+import { MultilineEditor } from "../components/MultilineEditor.tsx";
 import { colors, caption } from "../theme.ts";
 import type { ImageRecord } from "../services/types.ts";
 
@@ -13,6 +14,7 @@ interface PromptPanelProps {
 	draft: string;
 	onDraftChange(value: string): void;
 	onDraftSubmit(value: string): void;
+	onDraftCancel?(): void;
 	selectedModelLabel: string | null;
 	visionBusy: boolean;
 	inFlight: boolean;
@@ -26,6 +28,7 @@ export function PromptPanel({
 	draft,
 	onDraftChange,
 	onDraftSubmit,
+	onDraftCancel,
 	selectedModelLabel,
 	visionBusy,
 	inFlight,
@@ -78,11 +81,13 @@ export function PromptPanel({
 				paddingX={1}
 			>
 				{focused ? (
-					<TextInput
+					<MultilineEditor
 						defaultValue={draft}
 						placeholder="Describe the image… use @1 @2 to pin references."
+						focused={focused}
 						onChange={onDraftChange}
 						onSubmit={onDraftSubmit}
+						onCancel={onDraftCancel}
 					/>
 				) : (
 					<Text color={draft ? colors.warmParchment : colors.stoneGray}>
@@ -108,7 +113,7 @@ export function PromptPanel({
 				<Text color={colors.stoneGray}>
 					{caption(
 						focused
-							? "Tab/Esc exit · Enter commit"
+							? "Tab/Esc exit · Enter submit · Shift+Enter newline"
 							: "g generate · v vision draft · Tab edit",
 					)}
 				</Text>

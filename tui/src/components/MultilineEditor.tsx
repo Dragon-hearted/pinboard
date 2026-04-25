@@ -1,0 +1,332 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Box, Text, useInput, useStdin } from "ink";
+import { colors } from "../theme.ts";
+
+export interface MultilineEditorProps {
+	defaultValue?: string;
+	placeholder?: string;
+	focused: boolean;
+	onChange?(value: string): void;
+	onSubmit?(value: string): void;
+	onCancel?(): void;
+}
+
+interface Cursor {
+	row: number;
+	col: number;
+}
+
+function splitLines(value: string): string[] {
+	const parts = value.split("\n");
+	return parts.length > 0 ? parts : [""];
+}
+
+export function MultilineEditor({
+	defaultValue = "",
+	placeholder,
+	focused,
+	onChange,
+	onSubmit,
+	onCancel,
+}: MultilineEditorProps) {
+	const [lines, setLines] = useState<string[]>(() => splitLines(defaultValue));
+	const [cursor, setCursor] = useState<Cursor>(() => {
+		const init = splitLines(defaultValue);
+		const row = Math.max(0, init.length - 1);
+		return { row, col: init[row]?.length ?? 0 };
+	});
+
+	const linesRef = useRef(lines);
+	const cursorRef = useRef(cursor);
+	useEffect(() => {
+		linesRef.current = lines;
+	}, [lines]);
+	useEffect(() => {
+		cursorRef.current = cursor;
+	}, [cursor]);
+
+	const onChangeRef = useRef(onChange);
+	useEffect(() => {
+		onChangeRef.current = onChange;
+	}, [onChange]);
+
+	const commit = useCallback(
+		(nextLines: string[], nextCursor: Cursor) => {
+			setLines(nextLines);
+			setCursor(nextCursor);
+			onChangeRef.current?.(nextLines.join("\n"));
+		},
+		[],
+	);
+
+	const insertText = useCallback(
+		(text: string) => {
+			const cur = cursorRef.current;
+			const ls = linesRef.current.slice();
+			const row = ls[cur.row] ?? "";
+			const before = row.slice(0, cur.col);
+			const after = row.slice(cur.col);
+
+			if (!text.includes("\n")) {
+				ls[cur.row] = before + text + after;
+				commit(ls, { row: cur.row, col: before.length + text.length });
+				return;
+			}
+			const parts = text.split("\n");
+			const first = parts[0] ?? "";
+			const last = parts[parts.length - 1] ?? "";
+			const middle = parts.slice(1, -1);
+			const newRows = [
+				before + first,
+				...middle,
+				last + after,
+			];
+			ls.splice(cur.row, 1, ...newRows);
+			commit(ls, {
+				row: cur.row + parts.length - 1,
+				col: last.length,
+			});
+		},
+		[commit],
+	);
+
+	const newline = useCallback(() => {
+		const cur = cursorRef.current;
+		const ls = linesRef.current.slice();
+		const row = ls[cur.row] ?? "";
+		const before = row.slice(0, cur.col);
+		const after = row.slice(cur.col);
+		ls.splice(cur.row, 1, before, after);
+		commit(ls, { row: cur.row + 1, col: 0 });
+	}, [commit]);
+
+	const backspace = useCallback(() => {
+		const cur = cursorRef.current;
+		const ls = linesRef.current.slice();
+		if (cur.col > 0) {
+			const row = ls[cur.row] ?? "";
+			ls[cur.row] = row.slice(0, cur.col - 1) + row.slice(cur.col);
+			commit(ls, { row: cur.row, col: cur.col - 1 });
+			return;
+		}
+		if (cur.row === 0) return;
+		const prev = ls[cur.row - 1] ?? "";
+		const curRow = ls[cur.row] ?? "";
+		const newCol = prev.length;
+		ls.splice(cur.row - 1, 2, prev + curRow);
+		commit(ls, { row: cur.row - 1, col: newCol });
+	}, [commit]);
+
+	const moveLeft = useCallback(() => {
+		const cur = cursorRef.current;
+		if (cur.col > 0) {
+			setCursor({ row: cur.row, col: cur.col - 1 });
+			return;
+		}
+		if (cur.row === 0) return;
+		const prev = linesRef.current[cur.row - 1] ?? "";
+		setCursor({ row: cur.row - 1, col: prev.length });
+	}, []);
+
+	const moveRight = useCallback(() => {
+		const cur = cursorRef.current;
+		const row = linesRef.current[cur.row] ?? "";
+		if (cur.col < row.length) {
+			setCursor({ row: cur.row, col: cur.col + 1 });
+			return;
+		}
+		if (cur.row >= linesRef.current.length - 1) return;
+		setCursor({ row: cur.row + 1, col: 0 });
+	}, []);
+
+	const moveUp = useCallback(() => {
+		const cur = cursorRef.current;
+		if (cur.row === 0) {
+			setCursor({ row: 0, col: 0 });
+			return;
+		}
+		const prev = linesRef.current[cur.row - 1] ?? "";
+		setCursor({ row: cur.row - 1, col: Math.min(cur.col, prev.length) });
+	}, []);
+
+	const moveDown = useCallback(() => {
+		const cur = cursorRef.current;
+		if (cur.row >= linesRef.current.length - 1) {
+			const row = linesRef.current[cur.row] ?? "";
+			setCursor({ row: cur.row, col: row.length });
+			return;
+		}
+		const next = linesRef.current[cur.row + 1] ?? "";
+		setCursor({ row: cur.row + 1, col: Math.min(cur.col, next.length) });
+	}, []);
+
+	const moveHome = useCallback(() => {
+		setCursor((c) => ({ row: c.row, col: 0 }));
+	}, []);
+
+	const moveEnd = useCallback(() => {
+		const cur = cursorRef.current;
+		const row = linesRef.current[cur.row] ?? "";
+		setCursor({ row: cur.row, col: row.length });
+	}, []);
+
+	const killToEnd = useCallback(() => {
+		const cur = cursorRef.current;
+		const ls = linesRef.current.slice();
+		const row = ls[cur.row] ?? "";
+		ls[cur.row] = row.slice(0, cur.col);
+		commit(ls, cur);
+	}, [commit]);
+
+	const killToStart = useCallback(() => {
+		const cur = cursorRef.current;
+		const ls = linesRef.current.slice();
+		const row = ls[cur.row] ?? "";
+		ls[cur.row] = row.slice(cur.col);
+		commit(ls, { row: cur.row, col: 0 });
+	}, [commit]);
+
+	useInput(
+		(input, key) => {
+			if (key.escape) {
+				onCancel?.();
+				return;
+			}
+			if (key.return) {
+				if (key.shift) {
+					newline();
+					return;
+				}
+				onSubmit?.(linesRef.current.join("\n"));
+				return;
+			}
+			// Terminals can't reliably send a distinct Shift+Enter sequence.
+			// Convention: \x1b\r (Alt+Enter / "modify-other-keys" CR) inserts a
+			// newline. ink strips the leading ESC, so we see input='\r' with
+			// key.return=false — that branch is our newline trigger.
+			if (input === "\r" && !key.return) {
+				newline();
+				return;
+			}
+			// Both Backspace (\x7f) and Delete (\x1b[3~) collapse to key.delete in
+			// ink; Ctrl+H sets key.backspace. Treat all three as "remove the
+			// character before the cursor" — matches @inkjs/ui's TextInput.
+			if (key.backspace || key.delete) {
+				backspace();
+				return;
+			}
+			if (key.leftArrow) {
+				moveLeft();
+				return;
+			}
+			if (key.rightArrow) {
+				moveRight();
+				return;
+			}
+			if (key.upArrow) {
+				moveUp();
+				return;
+			}
+			if (key.downArrow) {
+				moveDown();
+				return;
+			}
+			if (key.tab) {
+				// Tab is owned by the outer keymap (focus cycle). No-op.
+				return;
+			}
+			if (key.ctrl) {
+				if (input === "a") {
+					moveHome();
+					return;
+				}
+				if (input === "e") {
+					moveEnd();
+					return;
+				}
+				if (input === "k") {
+					killToEnd();
+					return;
+				}
+				if (input === "u") {
+					killToStart();
+					return;
+				}
+				// Other ctrl chords bubble to the outer keymap; ignore here.
+				return;
+			}
+			if (key.meta) {
+				return;
+			}
+			if (input && input.length > 0) {
+				insertText(input);
+			}
+		},
+		{ isActive: focused },
+	);
+
+	const { stdin, isRawModeSupported } = useStdin();
+
+	useEffect(() => {
+		if (!focused || !isRawModeSupported || !stdin) return;
+		const handler = (chunk: Buffer | string) => {
+			const s = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+			// Match standalone Home/End escape sequences. We deliberately
+			// avoid mis-firing inside multi-key bursts by requiring the
+			// sequence to be the entire chunk.
+			if (s === "\x1b[H" || s === "\x1bOH" || s === "\x1b[1~" || s === "\x1b[7~") {
+				moveHome();
+				return;
+			}
+			if (s === "\x1b[F" || s === "\x1bOF" || s === "\x1b[4~" || s === "\x1b[8~") {
+				moveEnd();
+			}
+		};
+		stdin.on("data", handler);
+		return () => {
+			stdin.off("data", handler);
+		};
+	}, [focused, isRawModeSupported, stdin, moveHome, moveEnd]);
+
+	const showPlaceholder =
+		placeholder && lines.length === 1 && (lines[0] ?? "") === "";
+
+	return (
+		<Box flexDirection="column">
+			{showPlaceholder ? (
+				<Text color={colors.stoneGray}>{placeholder}</Text>
+			) : (
+				lines.map((line, idx) => (
+					<EditorLine
+						key={idx}
+						line={line}
+						isCursorRow={focused && cursor.row === idx}
+						col={cursor.col}
+					/>
+				))
+			)}
+		</Box>
+	);
+}
+
+interface EditorLineProps {
+	line: string;
+	isCursorRow: boolean;
+	col: number;
+}
+
+function EditorLine({ line, isCursorRow, col }: EditorLineProps) {
+	if (!isCursorRow) {
+		return <Text color={colors.warmParchment}>{line.length === 0 ? " " : line}</Text>;
+	}
+	const before = line.slice(0, col);
+	const at = line.slice(col, col + 1);
+	const after = line.slice(col + 1);
+	return (
+		<Text color={colors.warmParchment}>
+			{before}
+			<Text inverse>{at.length > 0 ? at : " "}</Text>
+			{after}
+		</Text>
+	);
+}

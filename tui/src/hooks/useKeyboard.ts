@@ -4,6 +4,7 @@
  * precedence — modals own the keyboard until they close.
  */
 
+import { useEffect, useRef } from "react";
 import { useInput, useStdin, type Key } from "ink";
 
 export type FocusId = "gallery" | "prompt" | "preview";
@@ -25,6 +26,24 @@ export type ModalId =
 	| null;
 
 export type KeyHandler = (input: string, key: Key) => void;
+
+/**
+ * Sentinel keys for non-printable bindings. Use these as keys in a `Keymap`
+ * record alongside printable characters (e.g. `j`, `k`):
+ *   `__arrowUp__`, `__arrowDown__`, `__arrowLeft__`, `__arrowRight__`
+ *   `__home__`, `__end__`, `__pageUp__`, `__pageDown__`
+ */
+export const KEY_SENTINELS = {
+	arrowUp: "__arrowUp__",
+	arrowDown: "__arrowDown__",
+	arrowLeft: "__arrowLeft__",
+	arrowRight: "__arrowRight__",
+	home: "__home__",
+	end: "__end__",
+	pageUp: "__pageUp__",
+	pageDown: "__pageDown__",
+} as const;
+
 export type Keymap = Record<string, KeyHandler>;
 
 export interface UseKeyboardOpts {
@@ -58,7 +77,20 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		onInvalidKey,
 	} = opts;
 
-	const { isRawModeSupported } = useStdin();
+	const { stdin, isRawModeSupported } = useStdin();
+
+	const paneKeymapRef = useRef(paneKeymap);
+	const captureModeRef = useRef(captureMode);
+	const modalRef = useRef(modal);
+	useEffect(() => {
+		paneKeymapRef.current = paneKeymap;
+	}, [paneKeymap]);
+	useEffect(() => {
+		captureModeRef.current = captureMode;
+	}, [captureMode]);
+	useEffect(() => {
+		modalRef.current = modal;
+	}, [modal]);
 
 	useInput(
 		(input, key) => {
@@ -79,16 +111,27 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 			return;
 		}
 
-		// Text-capture mode: let the owning input drive, we only handle Esc + Tab.
+		// Text-capture mode: editor owns printable + arrow + backspace + Enter.
+		// We still surface Esc (exit), Tab (focus cycle), and Ctrl-chords so
+		// global keys like Ctrl+C reach `quit` and pane Ctrl-chords still fire.
 		if (captureMode) {
 			if (key.escape) {
 				setFocus("gallery");
 				return;
 			}
 			if (key.tab) {
-				onInvalidKey?.(
-					"Press Enter to commit, then Tab to switch panes.",
-				);
+				setFocus(nextFocus(focus));
+				return;
+			}
+			if (key.ctrl) {
+				if (input === "c") {
+					quit();
+					return;
+				}
+				const handler = paneKeymap?.[input];
+				if (handler) {
+					handler(input, key);
+				}
 				return;
 			}
 			return;
@@ -128,6 +171,30 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 			return;
 		}
 
+			// Named-key dispatch: arrows + pageUp/pageDown route through the
+			// keymap when the focused pane has registered a sentinel handler.
+			const namedKey =
+				key.upArrow
+					? KEY_SENTINELS.arrowUp
+					: key.downArrow
+						? KEY_SENTINELS.arrowDown
+						: key.leftArrow
+							? KEY_SENTINELS.arrowLeft
+							: key.rightArrow
+								? KEY_SENTINELS.arrowRight
+								: key.pageUp
+									? KEY_SENTINELS.pageUp
+									: key.pageDown
+										? KEY_SENTINELS.pageDown
+										: null;
+			if (namedKey) {
+				const namedHandler = paneKeymap?.[namedKey];
+				if (namedHandler) {
+					namedHandler(input, key);
+				}
+				return;
+			}
+
 			// Delegate to the focused pane's keymap.
 			const handler = paneKeymap?.[input];
 			if (handler) {
@@ -150,4 +217,30 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		},
 		{ isActive: isRawModeSupported === true },
 	);
+
+	// Home/End escape sequences: ink's `useInput` doesn't surface them.
+	// Tap the raw stdin so panes can bind via `KEY_SENTINELS.home`/`end`.
+	useEffect(() => {
+		if (!isRawModeSupported || !stdin) return;
+		const handler = (chunk: Buffer | string) => {
+			if (modalRef.current || captureModeRef.current) return;
+			const s = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+			const sentinel =
+				s === "\x1b[H" || s === "\x1bOH" || s === "\x1b[1~" || s === "\x1b[7~"
+					? KEY_SENTINELS.home
+					: s === "\x1b[F" ||
+							s === "\x1bOF" ||
+							s === "\x1b[4~" ||
+							s === "\x1b[8~"
+						? KEY_SENTINELS.end
+						: null;
+			if (!sentinel) return;
+			const km = paneKeymapRef.current;
+			km?.[sentinel]?.(s, {} as Key);
+		};
+		stdin.on("data", handler);
+		return () => {
+			stdin.off("data", handler);
+		};
+	}, [isRawModeSupported, stdin]);
 }
