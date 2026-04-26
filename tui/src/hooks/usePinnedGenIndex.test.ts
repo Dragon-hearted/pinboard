@@ -168,6 +168,41 @@ describe("usePinnedGenIndex", () => {
 		}
 	});
 
+	test("re-anchors mid-history on a head shift without a one-frame mismatch", async () => {
+		// Regression for the two-effect race: at [g3,g2,g1] @ idx 2 → [g4,g3,g2,g1],
+		// the previous implementation briefly wrote generations[2].id ("g2") into
+		// pinnedGenId before the second effect re-anchored to "g1". Collapsing the
+		// effects keeps pinnedGenId in lock-step with the resolved index across
+		// every render — never observe a (genIndex, pinnedGenId) pair that points
+		// at different generations.
+		const m = mount([{ id: "g3" }, { id: "g2" }, { id: "g1" }]);
+		try {
+			await tick();
+			await wait(10);
+
+			m.apiRef.current?.setGenIndex(2);
+			await tick();
+			await wait(10);
+			expect(m.apiRef.current?.genIndex).toBe(2);
+			expect(m.apiRef.current?.pinnedGenId).toBe("g1");
+
+			m.rerenderWith([
+				{ id: "g4" },
+				{ id: "g3" },
+				{ id: "g2" },
+				{ id: "g1" },
+			]);
+			await tick();
+			await wait(10);
+
+			expect(m.apiRef.current?.pinnedGenId).toBe("g1");
+			expect(m.apiRef.current?.genIndex).toBe(3);
+			expect(m.notifyCalls.current).toBe(1);
+		} finally {
+			m.cleanup();
+		}
+	});
+
 	test("does not fire onNewer on initial mount", async () => {
 		const m = mount([{ id: "g1" }]);
 		try {

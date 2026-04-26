@@ -71,7 +71,7 @@ export function Gallery({
 												: colors.stoneGray
 										}
 									>
-										{isSelected ? "▶ " : "  "}
+										{isSelected ? "› " : "  "}
 										{tag}{" "}
 									</Text>
 									<Text

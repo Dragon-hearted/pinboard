@@ -40,41 +40,47 @@ export function usePinnedGenIndex<G extends PinnedGenLike>(
 		onNewerRef.current = onNewer;
 	}, [onNewer]);
 
-	// Update the pinnedGenId whenever the user explicitly moves the index.
-	useEffect(() => {
-		const current = generations[genIndex] ?? null;
-		setPinnedGenId(current?.id ?? null);
-	}, [genIndex, generations]);
-
 	const newestId = generations[0]?.id ?? null;
 	const previousNewestRef = useRef<string | null>(null);
 	const initialisedRef = useRef(false);
 
+	// Single effect: detect a head shift first and re-anchor `genIndex`
+	// synchronously, then derive `pinnedGenId` from the (now-correct) index.
+	// Splitting these two into separate effects produces a one-frame window
+	// where `pinnedGenId` points at the wrong generation while React schedules
+	// the second pass — anything observing it (selection highlight, badges,
+	// downstream effects) flickers.
 	useEffect(() => {
-		const prev = previousNewestRef.current;
+		const prevNewest = previousNewestRef.current;
 		previousNewestRef.current = newestId;
+
+		let resolvedIndex = genIndex;
+
 		if (!initialisedRef.current) {
 			initialisedRef.current = true;
-			return;
-		}
-		if (newestId === prev) return;
-		if (!newestId) return;
-
-		if (genIndex === 0) {
-			setPinnedGenId(newestId);
-			return;
-		}
-		// Mid-history: re-anchor to the same generation by id so the user's
-		// view stays on the record they were inspecting.
-		if (pinnedGenId) {
-			const newIdx = generations.findIndex((g) => g.id === pinnedGenId);
-			if (newIdx >= 0 && newIdx !== genIndex) {
-				setGenIndexState(newIdx);
+		} else if (newestId && newestId !== prevNewest) {
+			if (genIndex === 0) {
+				// User parked at the head — follow it silently.
+				resolvedIndex = 0;
+			} else {
+				// Mid-history — re-anchor by id and notify the caller.
+				if (pinnedGenId) {
+					const newIdx = generations.findIndex((g) => g.id === pinnedGenId);
+					if (newIdx >= 0) {
+						resolvedIndex = newIdx;
+						if (newIdx !== genIndex) setGenIndexState(newIdx);
+					}
+				}
+				onNewerRef.current?.();
 			}
 		}
-		onNewerRef.current?.();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [newestId]);
+
+		const current = generations[resolvedIndex] ?? null;
+		const nextPinnedId = current?.id ?? null;
+		if (nextPinnedId !== pinnedGenId) {
+			setPinnedGenId(nextPinnedId);
+		}
+	}, [genIndex, generations, newestId, pinnedGenId]);
 
 	const setGenIndex = useCallback(
 		(next: number | ((prev: number) => number)) => {

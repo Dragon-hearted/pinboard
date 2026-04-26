@@ -25,10 +25,10 @@ exports[`Preview renders 800-char prompt wrapped without 200-char truncation suf
 │ gemini-3-pro-image-preview                                                                       │
 │                                                                                                  │
 │ PROMPT                                                                                           │
-│ lorem ipsum dolor sit amet lorem ipsum dolor sit ame                                             │
-│ t lorem ipsum dolor sit amet lorem ipsum dolor sit a                                             │
-│ met lorem ipsum dolor sit amet lorem ipsum dolor sit                                             │
-│  amet lorem ipsum dolor sit amet lorem ipsum dolor …                                             │
+│ lorem ipsum dolor sit amet lorem ipsum dolor sit                                                 │
+│ amet lorem ipsum dolor sit amet lorem ipsum dolor                                                │
+│ sit amet lorem ipsum dolor sit amet lorem ipsum                                                  │
+│ dolor sit amet lorem ipsum dolor sit amet lorem …                                                │
 │                                                                                                  │
 │ <CREATED stripped>"
 `;

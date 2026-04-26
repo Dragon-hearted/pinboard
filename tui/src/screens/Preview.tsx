@@ -141,16 +141,53 @@ export function Preview({
 function clampLines(s: string, maxLines: number, colsPerLine: number): string {
 	const trimmed = s.replace(/\s+/g, " ").trim();
 	if (trimmed.length === 0) return "";
+
 	const out: string[] = [];
-	let i = 0;
-	while (i < trimmed.length && out.length < maxLines) {
-		out.push(trimmed.slice(i, i + colsPerLine));
-		i += colsPerLine;
+	const words = trimmed.split(" ");
+	let line = "";
+
+	for (const w of words) {
+		// A single word longer than the column cap — hard-break it.
+		if (w.length > colsPerLine) {
+			if (line) {
+				out.push(line);
+				line = "";
+				if (out.length >= maxLines) break;
+			}
+			let i = 0;
+			while (i < w.length && out.length < maxLines) {
+				const chunk = w.slice(i, i + colsPerLine);
+				if (i + colsPerLine >= w.length) {
+					line = chunk;
+				} else {
+					out.push(chunk);
+				}
+				i += colsPerLine;
+			}
+			if (out.length >= maxLines) break;
+			continue;
+		}
+
+		const candidate = line ? `${line} ${w}` : w;
+		if (candidate.length > colsPerLine) {
+			out.push(line);
+			if (out.length >= maxLines) break;
+			line = w;
+		} else {
+			line = candidate;
+		}
 	}
-	if (i < trimmed.length && out.length > 0) {
+	if (line && out.length < maxLines) out.push(line);
+
+	const consumed = out.join(" ").length;
+	if (consumed < trimmed.length && out.length > 0) {
 		const last = out[out.length - 1] ?? "";
-		out[out.length - 1] =
-			last.length > 0 ? `${last.slice(0, Math.max(0, last.length - 1))}…` : "…";
+		const room = Math.max(0, colsPerLine - 2);
+		const head =
+			last.length > room
+				? last.slice(0, room).replace(/\s+\S*$/, "").trimEnd()
+				: last;
+		out[out.length - 1] = head ? `${head} …` : "…";
 	}
 	return out.join("\n");
 }

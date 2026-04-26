@@ -42,11 +42,11 @@ describe("Gallery", () => {
 			const frame = ui.lastFrame() ?? "";
 
 			// Chevron only on the selected row.
-			expect(frame.match(/▶/g)?.length ?? 0).toBe(1);
+			expect(frame.match(/›/g)?.length ?? 0).toBe(1);
 			// The chevron belongs to row @2 (selected index 1).
-			expect(frame).toMatch(/▶\s*@2/);
-			expect(frame).not.toMatch(/▶\s*@1/);
-			expect(frame).not.toMatch(/▶\s*@3/);
+			expect(frame).toMatch(/›\s*@2/);
+			expect(frame).not.toMatch(/›\s*@1/);
+			expect(frame).not.toMatch(/›\s*@3/);
 
 			// Each row carries an intent badge — IN for generation, DRAFT for prompt-only.
 			// CAPTION letter-spaces them so we match with optional whitespace between glyphs.

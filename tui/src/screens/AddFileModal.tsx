@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { TextInput, Spinner } from "@inkjs/ui";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Card } from "../components/Card.tsx";
@@ -43,7 +43,8 @@ export function AddFileModal({ onAdd, onClose }: AddFileModalProps) {
 		setBusy(false);
 		setProgress(null);
 		if (errors.length > 0) {
-			setError(`Added ${added}, failed ${errors.length}: ${errors[0]}`);
+			const detail = errors.length === 1 ? errors[0] : errors.join(" · ");
+			setError(`Added ${added}, failed ${errors.length}: ${detail}`);
 		} else {
 			onClose();
 		}
@@ -54,8 +55,11 @@ export function AddFileModal({ onAdd, onClose }: AddFileModalProps) {
 		await addMany(paths);
 	};
 
-	// Cmd+V / Ctrl+V image paste from clipboard. Pulls PNG bytes via pbpaste /
-	// wl-paste / xclip and writes a temp file before delegating to onAdd.
+	// Ctrl/Cmd+V image paste. Most terminals (Terminal.app, iTerm2, GNOME
+	// Terminal, Alacritty) intercept the modifier and inject the clipboard text
+	// directly into the input field — only Kitty + terminals running the kitty
+	// keyboard protocol or `xterm*modifyOtherKeys: 2` reach this handler. The
+	// regular text-path is what users hit on the common case.
 	useInput((input, key) => {
 		if (busy) return;
 		if (!key.ctrl && !key.meta) return;
@@ -63,12 +67,27 @@ export function AddFileModal({ onAdd, onClose }: AddFileModalProps) {
 
 		const png = pasteImagePng();
 		if (png && png.length > 0) {
+			let dir: string | null = null;
 			try {
-				const dir = mkdtempSync(join(tmpdir(), "pinboard-paste-"));
+				dir = mkdtempSync(join(tmpdir(), "pinboard-paste-"));
 				const dest = join(dir, "clipboard.png");
 				writeFileSync(dest, png);
-				void addMany([dest]);
+				const sweep = dir;
+				void addMany([dest]).finally(() => {
+					try {
+						rmSync(sweep, { recursive: true, force: true });
+					} catch {
+						// best-effort cleanup
+					}
+				});
 			} catch (e) {
+				if (dir) {
+					try {
+						rmSync(dir, { recursive: true, force: true });
+					} catch {
+						// best-effort cleanup
+					}
+				}
 				setError(`Clipboard image failed: ${(e as Error).message}`);
 			}
 			return;
@@ -89,7 +108,7 @@ export function AddFileModal({ onAdd, onClose }: AddFileModalProps) {
 					<>
 						<Text color={colors.stoneGray}>
 							{caption(
-								"Paste / drag a path. Multi-line + multi-path supported. Ctrl/Cmd+V pastes clipboard image.",
+								"Paste / drag a path. Multi-line + multi-path supported. Image paste needs Kitty / kitty-keyboard-protocol terminals.",
 							)}
 						</Text>
 						<Box
@@ -111,7 +130,7 @@ export function AddFileModal({ onAdd, onClose }: AddFileModalProps) {
 						) : null}
 						<Box marginTop={1}>
 							<Text color={colors.stoneGray}>
-								{caption("Esc cancel · Enter submit · Ctrl/Cmd+V image paste")}
+								{caption("Esc cancel · Enter submit · Ctrl/Cmd+V image paste (kitty)")}
 							</Text>
 						</Box>
 					</>

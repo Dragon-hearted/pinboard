@@ -41,7 +41,8 @@ export function App() {
 	const refs = useReferences();
 	const gens = useGenerations();
 	const engine = useImageEngine();
-	const vision = useVisionStatus();
+	const [reloadToken, setReloadToken] = useState(0);
+	const vision = useVisionStatus(reloadToken);
 
 	const [focus, setFocus] = useState<FocusId>("gallery");
 	const [modal, setModal] = useState<ModalId>(null);
@@ -232,6 +233,7 @@ export function App() {
 	const reloadTools = useCallback(async () => {
 		flash("Reloading tools…", "info", 1500);
 		claudevision.__resetProbeCache();
+		setReloadToken((n) => n + 1);
 		try {
 			await imageengine.restart({ silent: true });
 			await engine.refreshBudget();

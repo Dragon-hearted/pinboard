@@ -17,7 +17,7 @@
  * callers receive `Promise<string>` uniformly.
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { extname } from "node:path";
 import terminalImage from "terminal-image";
@@ -168,9 +168,9 @@ function renderChafa(
 	cols: number,
 	rows: number,
 	format: "sixel" | "symbols",
-): string | null {
+): Promise<string | null> {
 	const chafa = probeChafa();
-	if (!chafa) return null;
+	if (!chafa) return Promise.resolve(null);
 	const args = [
 		"--size",
 		`${cols}x${rows}`,
@@ -183,10 +183,19 @@ function renderChafa(
 		args.push("--symbols", "block+border+space");
 	}
 	args.push(path);
-	const r = spawnSync(chafa, args, { encoding: "utf8" });
-	if (r.status !== 0 || !r.stdout) return null;
-	const out = r.stdout;
-	return out.endsWith("\n") ? out.slice(0, -1) : out;
+	return new Promise((resolve) => {
+		const proc = spawn(chafa, args);
+		let stdout = "";
+		proc.stdout.setEncoding("utf8");
+		proc.stdout.on("data", (chunk) => {
+			stdout += chunk;
+		});
+		proc.on("error", () => resolve(null));
+		proc.on("close", (code) => {
+			if (code !== 0 || !stdout) return resolve(null);
+			resolve(stdout.endsWith("\n") ? stdout.slice(0, -1) : stdout);
+		});
+	});
 }
 
 export interface RenderThumbOpts {
@@ -217,12 +226,12 @@ export async function renderThumb(opts: RenderThumbOpts): Promise<string> {
 		if (proto === "kitty") return encodeKitty(path, cols, rows);
 		if (proto === "iterm2") return encodeITerm2(path, cols, rows);
 		if (proto === "chafa-sixel") {
-			const rendered = renderChafa(path, cols, rows, "sixel");
+			const rendered = await renderChafa(path, cols, rows, "sixel");
 			if (rendered !== null) return rendered;
 			// chafa unexpectedly failed — fall through to half-block
 		}
 		if (proto === "chafa-symbols") {
-			const rendered = renderChafa(path, cols, rows, "symbols");
+			const rendered = await renderChafa(path, cols, rows, "symbols");
 			if (rendered !== null) return rendered;
 		}
 		return await renderHalfBlock(path, cols, rows);

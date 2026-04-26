@@ -117,6 +117,21 @@ export function MultilineEditor({
 		commit(ls, { row: cur.row - 1, col: newCol });
 	}, [commit]);
 
+	const forwardDelete = useCallback(() => {
+		const cur = cursorRef.current;
+		const ls = linesRef.current.slice();
+		const row = ls[cur.row] ?? "";
+		if (cur.col < row.length) {
+			ls[cur.row] = row.slice(0, cur.col) + row.slice(cur.col + 1);
+			commit(ls, cur);
+			return;
+		}
+		if (cur.row >= ls.length - 1) return;
+		const next = ls[cur.row + 1] ?? "";
+		ls.splice(cur.row, 2, row + next);
+		commit(ls, cur);
+	}, [commit]);
+
 	const moveLeft = useCallback(() => {
 		const cur = cursorRef.current;
 		if (cur.col > 0) {
@@ -219,11 +234,11 @@ export function MultilineEditor({
 				newline();
 				return;
 			}
-			// Both Backspace (\x7f) and Delete (\x1b[3~) collapse to key.delete in
-			// ink; Ctrl+H sets key.backspace. Treat all three as "remove the
-			// character before the cursor" — matches @inkjs/ui's TextInput.
+			// Backspace / Delete are owned by the raw stdin effect below — ink
+			// collapses Backspace (\x7f) and forward-Delete (\x1b[3~) into a
+			// single `key.delete` flag so we cannot disambiguate here. Skip both
+			// flags to avoid applying the operation twice.
 			if (key.backspace || key.delete) {
-				backspace();
 				return;
 			}
 			if (key.leftArrow) {
@@ -282,9 +297,20 @@ export function MultilineEditor({
 		if (!focused || !isRawModeSupported || !stdin) return;
 		const handler = (chunk: Buffer | string) => {
 			const s = typeof chunk === "string" ? chunk : chunk.toString("utf8");
-			// Match standalone Home/End escape sequences. We deliberately
-			// avoid mis-firing inside multi-key bursts by requiring the
-			// sequence to be the entire chunk.
+			// Backspace / Delete are owned here — ink's parser collapses both
+			// Backspace (\x7f) and forward-Delete (\x1b[3~) into a single
+			// `key.delete` flag, so we route off the raw byte instead.
+			if (s === "\x7f" || s === "\x08" || s === "\x1b\x7f") {
+				backspace();
+				return;
+			}
+			if (s === "\x1b[3~" || s === "\x1b[3$" || s === "\x1b[3^") {
+				forwardDelete();
+				return;
+			}
+			// Standalone Home/End escape sequences. We deliberately avoid
+			// mis-firing inside multi-key bursts by requiring the sequence to
+			// be the entire chunk.
 			if (s === "\x1b[H" || s === "\x1bOH" || s === "\x1b[1~" || s === "\x1b[7~") {
 				moveHome();
 				return;
@@ -297,7 +323,7 @@ export function MultilineEditor({
 		return () => {
 			stdin.off("data", handler);
 		};
-	}, [focused, isRawModeSupported, stdin, moveHome, moveEnd]);
+	}, [focused, isRawModeSupported, stdin, moveHome, moveEnd, backspace, forwardDelete]);
 
 	const showPlaceholder =
 		placeholder && lines.length === 1 && (lines[0] ?? "") === "";

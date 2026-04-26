@@ -14,12 +14,19 @@ export interface UseVisionStatusApi {
 	reason: string | null;
 }
 
-export function useVisionStatus(): UseVisionStatusApi {
+/**
+ * Re-runs whenever `reloadToken` changes. Pair with `claudevision.__resetProbeCache()`
+ * in the reload-tools flow so the StatusBar reflects the freshly-probed CLI
+ * instead of the stale cached probe from mount.
+ */
+export function useVisionStatus(reloadToken = 0): UseVisionStatusApi {
 	const [status, setStatus] = useState<VisionStatus>("checking");
 	const [reason, setReason] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
+		setStatus("checking");
+		setReason(null);
 		(async () => {
 			try {
 				const probe = await claudevision.probeAtStartup();
@@ -43,7 +50,7 @@ export function useVisionStatus(): UseVisionStatusApi {
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [reloadToken]);
 
 	return { status, reason };
 }

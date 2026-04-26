@@ -9,15 +9,16 @@ import { spawnSync } from "node:child_process";
 /** Read text from the system clipboard, or null if no text is available. */
 export function pasteText(): string | null {
 	if (process.platform === "darwin") {
-		const r = spawnSync("pbpaste", [], { encoding: "utf8" });
+		const r = spawnSync("pbpaste", [], { encoding: "utf8", timeout: 250 });
 		if (r.status === 0 && r.stdout) return r.stdout;
 		return null;
 	}
 	if (process.platform === "linux") {
-		const wl = spawnSync("wl-paste", [], { encoding: "utf8" });
+		const wl = spawnSync("wl-paste", [], { encoding: "utf8", timeout: 250 });
 		if (wl.status === 0 && wl.stdout) return wl.stdout;
 		const xc = spawnSync("xclip", ["-selection", "clipboard", "-o"], {
 			encoding: "utf8",
+			timeout: 250,
 		});
 		if (xc.status === 0 && xc.stdout) return xc.stdout;
 	}
@@ -33,18 +34,20 @@ export function pasteImagePng(): Buffer | null {
 	if (process.platform === "darwin") {
 		const r = spawnSync("pbpaste", ["-Prefer", "image/png"], {
 			encoding: "buffer",
+			timeout: 250,
 		});
 		if (r.status === 0 && r.stdout && r.stdout.length > 0) return r.stdout;
 	}
 	if (process.platform === "linux") {
 		const wl = spawnSync("wl-paste", ["--type", "image/png"], {
 			encoding: "buffer",
+			timeout: 250,
 		});
 		if (wl.status === 0 && wl.stdout && wl.stdout.length > 0) return wl.stdout;
 		const xc = spawnSync(
 			"xclip",
 			["-selection", "clipboard", "-t", "image/png", "-o"],
-			{ encoding: "buffer" },
+			{ encoding: "buffer", timeout: 250 },
 		);
 		if (xc.status === 0 && xc.stdout && xc.stdout.length > 0) return xc.stdout;
 	}
@@ -106,7 +109,17 @@ export function splitPastedPaths(raw: string): string[] {
 
 function normalizePath(path: string): string {
 	let out = path.trim();
-	if (out.startsWith("file://")) out = out.slice("file://".length);
+	if (out.startsWith("file://")) {
+		// Strip optional `localhost` host (Safari emits `file://localhost/...`)
+		// then percent-decode so paths with spaces / non-ASCII work.
+		out = out.slice("file://".length);
+		if (out.startsWith("localhost/")) out = out.slice("localhost".length);
+		try {
+			out = decodeURIComponent(out);
+		} catch {
+			// malformed escape — leave as-is rather than dropping the path
+		}
+	}
 	if (out.startsWith("~/") || out === "~") {
 		const home = process.env.HOME ?? "";
 		out = home + out.slice(1);

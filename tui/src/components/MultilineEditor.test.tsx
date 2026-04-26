@@ -210,18 +210,69 @@ describe("MultilineEditor", () => {
 		}
 	});
 
-	test("Delete key (CSI 3~) collapses to backspace per ink-ui convention", async () => {
+	test("Delete (CSI 3~) removes the character at the cursor (forward delete)", async () => {
 		const { state, ui } = mount();
 		try {
 			await tick();
 			ui.stdin.write("abc");
 			await tick();
-			// CSI 3~ (forward Delete) maps to key.delete in ink. We treat
-			// key.backspace and key.delete the same way — both remove the
-			// character to the left of the cursor.
+			// Move cursor between 'a' and 'b'.
+			ui.stdin.write(HOME);
+			await tick();
+			ui.stdin.write(ARROW_RIGHT);
+			await tick();
+			// Forward-Delete erases 'b' (the char *at* the cursor), leaving
+			// the cursor in place. Distinct from Backspace (\x7f) which
+			// removes the char *before* the cursor.
 			ui.stdin.write(DELETE_FORWARD);
 			await tick();
-			expect(lastChange(state)).toBe("ab");
+			expect(lastChange(state)).toBe("ac");
+		} finally {
+			ui.unmount();
+		}
+	});
+
+	test("Delete at end-of-line joins with the next line", async () => {
+		const { state, ui } = mount();
+		try {
+			await tick();
+			ui.stdin.write("ab");
+			await tick();
+			ui.stdin.write(SHIFT_ENTER);
+			await tick();
+			ui.stdin.write("cd");
+			await tick();
+			// Move to end of first line: up, then End.
+			ui.stdin.write(ARROW_UP);
+			await tick();
+			ui.stdin.write(END);
+			await tick();
+			ui.stdin.write(DELETE_FORWARD);
+			await tick();
+			expect(lastChange(state)).toBe("abcd");
+		} finally {
+			ui.unmount();
+		}
+	});
+
+	test("Backspace and forward-Delete are distinct in the same session", async () => {
+		const { state, ui } = mount();
+		try {
+			await tick();
+			ui.stdin.write("abcd");
+			await tick();
+			// Cursor at end. Backspace removes 'd'.
+			ui.stdin.write(BACKSPACE);
+			await tick();
+			expect(lastChange(state)).toBe("abc");
+			// Move to between 'a' and 'b'. Forward-Delete removes 'b'.
+			ui.stdin.write(HOME);
+			await tick();
+			ui.stdin.write(ARROW_RIGHT);
+			await tick();
+			ui.stdin.write(DELETE_FORWARD);
+			await tick();
+			expect(lastChange(state)).toBe("ac");
 		} finally {
 			ui.unmount();
 		}

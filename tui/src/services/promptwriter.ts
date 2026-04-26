@@ -326,21 +326,28 @@ export async function draftFromRefs(
 		.join("\n");
 	const refTagging = [inputList, draftList].filter(Boolean).join("\n");
 
-	const composed = [
+	// CLI draft: omit the model prompt-structure block — `enhancePrompt`
+	// re-injects it from the same guide. Keeping both would duplicate it.
+	const cliDraft = [
 		DRAFT_FROM_REFS_PREAMBLE,
-		promptStructure ? `\n--- model prompt structure ---\n${promptStructure}` : "",
 		refTagging ? `\n--- reference tagging ---\n${refTagging}` : "",
 		`\n--- user intent ---\n${intent.trim()}`,
 	]
 		.filter(Boolean)
 		.join("\n");
 
+	// SDK draft: full composed instruction including the prompt-structure block,
+	// since `draftWithSdk` does not re-inject it.
+	const composed = promptStructure
+		? `${DRAFT_FROM_REFS_PREAMBLE}\n\n--- model prompt structure ---\n${promptStructure}${refTagging ? `\n\n--- reference tagging ---\n${refTagging}` : ""}\n\n--- user intent ---\n${intent.trim()}`
+		: cliDraft;
+
 	const allRefs = [...opts.inputs, ...opts.draftOnly];
 	const primaryRef = allRefs[0]; // CLI flow attaches the first ref; covers the common case.
 
 	try {
 		return await claudevision.enhancePrompt({
-			draft: intent.trim(),
+			draft: cliDraft,
 			modelName,
 			imagePath: primaryRef,
 			timeoutMs: opts.timeoutMs,

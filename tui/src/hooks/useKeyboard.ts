@@ -28,6 +28,28 @@ export type ModalId =
 export type KeyHandler = (input: string, key: Key) => void;
 
 /**
+ * All-false `Key` value. Used when synthesising sentinel handler invocations
+ * from raw stdin (Home/End escape sequences) where ink's parsed `key` is not
+ * available. Centralised so it stays exhaustive if ink's `Key` type grows.
+ */
+const EMPTY_KEY: Key = {
+	upArrow: false,
+	downArrow: false,
+	leftArrow: false,
+	rightArrow: false,
+	pageDown: false,
+	pageUp: false,
+	return: false,
+	escape: false,
+	ctrl: false,
+	shift: false,
+	tab: false,
+	backspace: false,
+	delete: false,
+	meta: false,
+};
+
+/**
  * Sentinel keys for non-printable bindings. Use these as keys in a `Keymap`
  * record alongside printable characters (e.g. `j`, `k`):
  *   `__arrowUp__`, `__arrowDown__`, `__arrowLeft__`, `__arrowRight__`
@@ -243,7 +265,7 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 						: null;
 			if (!sentinel) return;
 			const km = paneKeymapRef.current;
-			km?.[sentinel]?.(s, {} as Key);
+			km?.[sentinel]?.(s, EMPTY_KEY);
 		};
 		stdin.on("data", handler);
 		return () => {
