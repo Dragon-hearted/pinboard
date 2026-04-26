@@ -27,11 +27,17 @@ function ensureUploadsDir(): string {
 	return UPLOADS_DIR;
 }
 
+export type ReferenceIntent = "generation" | "prompt-only";
+
 export interface UseReferencesApi {
 	references: ImageRecord[];
 	selectedIndex: number;
 	loading: boolean;
 	error: string | null;
+	intentMap: Map<string, ReferenceIntent>;
+	getIntent(id: string): ReferenceIntent;
+	setIntent(id: string, intent: ReferenceIntent): void;
+	toggleIntent(id: string): ReferenceIntent;
 	select(i: number): void;
 	selectDelta(delta: number): void;
 	refresh(): void;
@@ -47,12 +53,26 @@ export function useReferences(): UseReferencesApi {
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [intentMap, setIntentMap] = useState<Map<string, ReferenceIntent>>(
+		() => new Map(),
+	);
 
 	const refresh = useCallback(() => {
 		try {
 			const rows = db.listImages();
 			setReferences(rows);
 			setSelectedIndex((i) => Math.min(i, Math.max(0, rows.length - 1)));
+			setIntentMap((prev) => {
+				if (prev.size === 0) return prev;
+				const live = new Set(rows.map((r) => r.id));
+				let changed = false;
+				const next = new Map<string, ReferenceIntent>();
+				for (const [id, v] of prev) {
+					if (live.has(id)) next.set(id, v);
+					else changed = true;
+				}
+				return changed ? next : prev;
+			});
 			setError(null);
 		} catch (e) {
 			setError((e as Error).message);
@@ -64,6 +84,40 @@ export function useReferences(): UseReferencesApi {
 	useEffect(() => {
 		refresh();
 	}, [refresh]);
+
+	const getIntent = useCallback(
+		(id: string): ReferenceIntent => intentMap.get(id) ?? "generation",
+		[intentMap],
+	);
+
+	const setIntent = useCallback(
+		(id: string, intent: ReferenceIntent): void => {
+			setIntentMap((prev) => {
+				if (intent === "generation") {
+					if (!prev.has(id)) return prev;
+					const next = new Map(prev);
+					next.delete(id);
+					return next;
+				}
+				if (prev.get(id) === intent) return prev;
+				const next = new Map(prev);
+				next.set(id, intent);
+				return next;
+			});
+		},
+		[],
+	);
+
+	const toggleIntent = useCallback(
+		(id: string): ReferenceIntent => {
+			const current = intentMap.get(id) ?? "generation";
+			const next: ReferenceIntent =
+				current === "generation" ? "prompt-only" : "generation";
+			setIntent(id, next);
+			return next;
+		},
+		[intentMap, setIntent],
+	);
 
 	const select = useCallback((i: number) => {
 		setSelectedIndex((prev) => {
@@ -131,30 +185,39 @@ export function useReferences(): UseReferencesApi {
 
 	const addFromGeneration = useCallback(
 		async (genId: string): Promise<ImageRecord> => {
-			// Generation rows are already mirror-inserted into `images` by
-			// `db.insertGeneration`. If caller wants to pull a base64 copy from
-			// ImageEngine (e.g. for a generation not yet mirrored), ask the service.
-			const existing = db.getImage(genId);
-			if (existing) {
-				refresh();
-				return existing;
-			}
-			const payload = await imageengine.useAsReference(genId);
-			const ext = payload.mimeType.split("/")[1] ?? "png";
-			const id = randomUUID();
+			// Promote a generation into the gallery as a regular upload. Prefers
+			// the local downloads/ copy written by useGenerations; falls back to
+			// the ImageEngine base64 endpoint if the local file vanished.
 			const dir = ensureUploadsDir();
-			const filename = `${id}.${ext}`;
-			const dest = `${dir}/${filename}`;
-			await Bun.write(dest, Buffer.from(payload.data, "base64"));
+			const id = randomUUID();
+			const gen = db.getGeneration(genId);
+
+			let dest: string;
+			let mimeType: string;
+			let ext: string;
+
+			if (gen && existsSync(gen.resultPath)) {
+				ext = extname(gen.resultPath).slice(1).toLowerCase() || "png";
+				mimeType = EXT_MIME[ext] ?? `image/${ext}`;
+				dest = `${dir}/${id}.${ext}`;
+				copyFileSync(gen.resultPath, dest);
+			} else {
+				const payload = await imageengine.useAsReference(genId);
+				ext = payload.mimeType.split("/")[1] ?? "png";
+				mimeType = payload.mimeType;
+				dest = `${dir}/${id}.${ext}`;
+				await Bun.write(dest, Buffer.from(payload.data, "base64"));
+			}
+
 			const record: ImageRecord = {
 				id,
-				filename,
-				originalName: `generation-${genId}.${ext}`,
+				filename: `${id}.${ext}`,
+				originalName: `generation-${genId.slice(0, 8)}.${ext}`,
 				path: dest,
-				mimeType: payload.mimeType,
+				mimeType,
 				size: Bun.file(dest).size ?? 0,
 				createdAt: new Date().toISOString(),
-				source: "generation-copy",
+				source: "upload",
 				sourceUrl: null,
 			};
 			db.insertImage(record);
@@ -167,6 +230,12 @@ export function useReferences(): UseReferencesApi {
 	const remove = useCallback(
 		(id: string) => {
 			db.deleteImage(id);
+			setIntentMap((prev) => {
+				if (!prev.has(id)) return prev;
+				const next = new Map(prev);
+				next.delete(id);
+				return next;
+			});
 			refresh();
 		},
 		[refresh],
@@ -185,6 +254,10 @@ export function useReferences(): UseReferencesApi {
 		selectedIndex,
 		loading,
 		error,
+		intentMap,
+		getIntent,
+		setIntent,
+		toggleIntent,
 		select,
 		selectDelta,
 		refresh,

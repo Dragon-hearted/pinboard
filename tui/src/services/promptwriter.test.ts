@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+	__resetProbeCache,
+	__setSpawn,
+} from "./claudevision";
+import {
 	__setFileReader,
 	__setRegistryLoader,
 	applyTemplate,
+	enrichWithGuide,
 	listImageModels,
 	loadModelGuide,
 	validatePromptForModel,
@@ -227,6 +232,78 @@ describe("promptwriter", () => {
 			const r = await validatePromptForModel("x", "Nonexistent");
 			expect(r.ok).toBe(false);
 			expect(r.errors[0]).toMatch(/guide/i);
+		});
+	});
+
+	describe("enrichWithGuide", () => {
+		afterEach(() => {
+			__setSpawn(null);
+			__resetProbeCache();
+		});
+
+		test("returns claudevision output on happy path (claude available)", async () => {
+			installMocks();
+			let i = 0;
+			const responses: Array<{
+				stdout?: string;
+				exitCode?: number;
+				spawnThrows?: Error;
+			}> = [
+				{ stdout: "1.0.0" },
+				{ stdout: "Usage: claude --image <path>" },
+				{ stdout: "  enriched output  \n" },
+			];
+			__setSpawn((cmd) => {
+				const r = responses[i] ?? responses[responses.length - 1];
+				i++;
+				if (r.spawnThrows) throw r.spawnThrows;
+				const enc = new TextEncoder();
+				const stream = new ReadableStream<Uint8Array>({
+					start(c) {
+						c.enqueue(enc.encode(r.stdout ?? ""));
+						c.close();
+					},
+				});
+				const errStream = new ReadableStream<Uint8Array>({
+					start(c) {
+						c.close();
+					},
+				});
+				let resolveExit!: (code: number) => void;
+				const exited = new Promise<number>((res) => {
+					resolveExit = res;
+				});
+				queueMicrotask(() => resolveExit(r.exitCode ?? 0));
+				return {
+					stdout: stream,
+					stderr: errStream,
+					exited,
+					kill: () => resolveExit(137),
+				};
+			});
+
+			const out = await enrichWithGuide(
+				"a cat on a sofa",
+				"NanoBanana Pro",
+				{ imagePath: "/tmp/ref.jpg" },
+			);
+			expect(out).toBe("enriched output");
+		});
+
+		test("falls back to applyTemplate when claude is unavailable", async () => {
+			installMocks();
+			__setSpawn(() => {
+				throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+			});
+
+			const out = await enrichWithGuide(
+				"a cat on a sofa",
+				"NanoBanana Pro",
+			);
+
+			// applyTemplate appends NanoBanana terminal line.
+			expect(out.endsWith("No text in image.")).toBe(true);
+			expect(out).toContain("a cat on a sofa");
 		});
 	});
 });

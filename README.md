@@ -72,6 +72,30 @@ Pinboard processes data through a multi-stage pipeline.
 ### Prerequisites
 
 - [**Bun**](https://bun.sh/) v1.0+ — `curl -fsSL https://bun.sh/install | bash`
+- [**Claude Code CLI**](https://claude.com/claude-code) — for vision-driven prompt drafting (`w` hotkey).
+- *(optional)* [**chafa**](https://hpjansson.org/chafa/) — direct-pixel previews on terminals without Kitty/iTerm2 graphics. `brew install chafa` on macOS.
+
+### Vision modes
+
+By default, vision shells to the local `claude` CLI (no paid API). If the CLI
+fails or is missing, the deterministic prompt-template fallback kicks in.
+
+For guaranteed vision (paid), export both:
+
+```bash
+export PINBOARD_ALLOW_API=1
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The SDK fallback only fires when both are set AND the CLI chain fails. Each
+SDK call logs `vision: SDK fallback active (PINBOARD_ALLOW_API=1) — paid API call`
+so you always see when you are billed.
+
+### Key rotation
+
+After editing `systems/image-engine/.env`, press capital **`R`** in pinboard to
+restart the image-engine subprocess and reset the vision probe. See
+`knowledge/key-rotation.md`.
 
 ### Install
 

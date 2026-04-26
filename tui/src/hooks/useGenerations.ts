@@ -60,6 +60,8 @@ export interface UseGenerationsApi {
 	lastError: string | null;
 	generate(args: GenerateArgs): Promise<GenerationRecord | null>;
 	refresh(): void;
+	/** Newest generation id, or null if none exist. */
+	latestId(): string | null;
 }
 
 export function useGenerations(): UseGenerationsApi {
@@ -84,11 +86,12 @@ export function useGenerations(): UseGenerationsApi {
 			setInFlight(true);
 			setLastError(null);
 			try {
-				const combined = [
-					...(args.generationRefIds ?? []),
-					...(args.promptOnlyRefIds ?? []),
-				];
-				const referenceImages = await loadReferenceImages(combined);
+				// Only generation-tagged refs are sent to the model. Prompt-only
+				// refs are recorded for audit/UI but never uploaded — see
+				// useGenerations.test.ts "ref intent split" for the contract.
+				const generationRefIds = args.generationRefIds ?? [];
+				const promptOnlyRefIds = args.promptOnlyRefIds ?? [];
+				const referenceImages = await loadReferenceImages(generationRefIds);
 				const req: GenerationRequest = {
 					prompt: args.prompt,
 					model: args.modelId,
@@ -108,10 +111,10 @@ export function useGenerations(): UseGenerationsApi {
 				const refsPayload =
 					args.generationRefIds || args.promptOnlyRefIds
 						? JSON.stringify({
-								generation: args.generationRefIds ?? [],
-								promptOnly: args.promptOnlyRefIds ?? [],
+								generation: generationRefIds,
+								promptOnly: promptOnlyRefIds,
 							})
-						: JSON.stringify(combined);
+						: JSON.stringify(generationRefIds);
 
 				const record: GenerationRecord = {
 					id: result.id,
@@ -138,5 +141,10 @@ export function useGenerations(): UseGenerationsApi {
 		[refresh],
 	);
 
-	return { generations, inFlight, lastError, generate, refresh };
+	const latestId = useCallback(
+		(): string | null => generations[0]?.id ?? null,
+		[generations],
+	);
+
+	return { generations, inFlight, lastError, generate, refresh, latestId };
 }

@@ -1,0 +1,7 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`CommandHints gallery focus lists move/use/vision/enrich/intent/generate/delete 1`] = `" j/k move · u use ref · v vision · w enrich · t toggle intent · g generate · d delete"`;
+
+exports[`CommandHints prompt focus lists Tab/Esc, Enter submit, Ctrl+J newline 1`] = `" Tab/Esc exit · Enter submit · Ctrl+J newline"`;
+
+exports[`CommandHints preview focus lists j/k history and End jump newest 1`] = `" j/k history · End jump newest"`;

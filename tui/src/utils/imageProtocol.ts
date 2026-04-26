@@ -1,29 +1,75 @@
 /**
  * Terminal image-protocol detection + encoding.
  *
- * Supported protocols (in order):
- *   - Kitty graphics (`\x1b_G...\x1b\\`) — Kitty, Ghostty
- *   - iTerm2 inline  (`\x1b]1337;File=...\x07`)
- *   - Sixel          — falls through to ANSI half-block today
- *   - ANSI half-block — via `terminal-image` (works in any 24-bit colour terminal)
+ * Precedence (highest to lowest, picks the first that fits the host terminal):
+ *   - Kitty graphics (`\x1b_G...\x1b\\`)             — Kitty, Ghostty
+ *   - iTerm2 inline  (`\x1b]1337;File=...\x07`)      — iTerm.app
+ *   - chafa --format=sixel                            — WezTerm, foot, mlterm,
+ *                                                      mintty, Black Box
+ *   - chafa --format=symbols                          — anywhere chafa is installed;
+ *                                                      block+border+space symbols
+ *                                                      look much closer to real
+ *                                                      pixels than half-block
+ *   - ANSI half-block via `terminal-image`            — last-resort fallback
  *
- * Native protocols are produced synchronously (just base64). The half-block
- * path is async because it has to decode + downscale the image; callers
- * receive `Promise<string>` uniformly.
+ * Native protocols are produced synchronously (just base64). chafa + the
+ * half-block path are async because they decode + downscale the image;
+ * callers receive `Promise<string>` uniformly.
  */
 
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { extname } from "node:path";
 import terminalImage from "terminal-image";
 
-export type ImageProtocol = "kitty" | "iterm2" | "sixel" | "ascii";
+export type ImageProtocol =
+	| "kitty"
+	| "iterm2"
+	| "chafa-sixel"
+	| "chafa-symbols"
+	| "ascii";
 
 let cachedProtocol: ImageProtocol | null = null;
+let cachedChafa: string | null | undefined; // undefined = not probed
+
+function probeChafa(): string | null {
+	if (cachedChafa !== undefined) return cachedChafa;
+	try {
+		const r = spawnSync("which", ["chafa"], { encoding: "utf8" });
+		if (r.status === 0 && r.stdout.trim()) {
+			cachedChafa = r.stdout.trim();
+		} else {
+			cachedChafa = null;
+		}
+	} catch {
+		cachedChafa = null;
+	}
+	return cachedChafa;
+}
+
+function terminalSupportsSixel(): boolean {
+	const env = process.env;
+	const term = env.TERM ?? "";
+	const termProgram = env.TERM_PROGRAM ?? "";
+	return (
+		termProgram === "WezTerm" ||
+		term === "foot" ||
+		term === "mlterm" ||
+		term === "mintty" ||
+		/sixel/i.test(term)
+	);
+}
 
 export function detectProtocol(): ImageProtocol {
 	if (cachedProtocol) return cachedProtocol;
 	cachedProtocol = detectProtocolImpl();
 	return cachedProtocol;
+}
+
+/** Test hook — clears the cached protocol detection. */
+export function __resetProtocolCache(): void {
+	cachedProtocol = null;
+	cachedChafa = undefined;
 }
 
 function detectProtocolImpl(): ImageProtocol {
@@ -37,8 +83,8 @@ function detectProtocolImpl(): ImageProtocol {
 	if (termProgram === "iTerm.app" || env.LC_TERMINAL === "iTerm2") {
 		return "iterm2";
 	}
-	if (termProgram === "WezTerm") {
-		return "sixel";
+	if (probeChafa()) {
+		return terminalSupportsSixel() ? "chafa-sixel" : "chafa-symbols";
 	}
 	return "ascii";
 }
@@ -117,6 +163,41 @@ async function renderHalfBlock(
 	return out.endsWith("\n") ? out.slice(0, -1) : out;
 }
 
+function renderChafa(
+	path: string,
+	cols: number,
+	rows: number,
+	format: "sixel" | "symbols",
+): Promise<string | null> {
+	const chafa = probeChafa();
+	if (!chafa) return Promise.resolve(null);
+	const args = [
+		"--size",
+		`${cols}x${rows}`,
+		"--format",
+		format,
+		"--animate",
+		"off",
+	];
+	if (format === "symbols") {
+		args.push("--symbols", "block+border+space");
+	}
+	args.push(path);
+	return new Promise((resolve) => {
+		const proc = spawn(chafa, args);
+		let stdout = "";
+		proc.stdout.setEncoding("utf8");
+		proc.stdout.on("data", (chunk) => {
+			stdout += chunk;
+		});
+		proc.on("error", () => resolve(null));
+		proc.on("close", (code) => {
+			if (code !== 0 || !stdout) return resolve(null);
+			resolve(stdout.endsWith("\n") ? stdout.slice(0, -1) : stdout);
+		});
+	});
+}
+
 export interface RenderThumbOpts {
 	path: string;
 	cols: number;
@@ -144,7 +225,15 @@ export async function renderThumb(opts: RenderThumbOpts): Promise<string> {
 	try {
 		if (proto === "kitty") return encodeKitty(path, cols, rows);
 		if (proto === "iterm2") return encodeITerm2(path, cols, rows);
-		// sixel + ascii both render an ANSI half-block thumbnail.
+		if (proto === "chafa-sixel") {
+			const rendered = await renderChafa(path, cols, rows, "sixel");
+			if (rendered !== null) return rendered;
+			// chafa unexpectedly failed — fall through to half-block
+		}
+		if (proto === "chafa-symbols") {
+			const rendered = await renderChafa(path, cols, rows, "symbols");
+			if (rendered !== null) return rendered;
+		}
 		return await renderHalfBlock(path, cols, rows);
 	} catch {
 		return placeholder(cols, rows, label);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, useApp } from "ink";
 import { Header } from "./components/Header.tsx";
+import { CommandHints } from "./components/CommandHints.tsx";
 import { StatusBar, type StatusMessage, type StatusTone } from "./components/StatusBar.tsx";
 
 import { Gallery } from "./screens/Gallery.tsx";
@@ -16,8 +17,11 @@ import { AspectRatioPicker } from "./screens/AspectRatioPicker.tsx";
 import { useReferences } from "./hooks/useReferences.ts";
 import { useGenerations } from "./hooks/useGenerations.ts";
 import { useImageEngine } from "./hooks/useImageEngine.ts";
+import { usePinnedGenIndex } from "./hooks/usePinnedGenIndex.ts";
+import { useVisionStatus } from "./hooks/useVisionStatus.ts";
 import {
 	useKeyboard,
+	KEY_SENTINELS,
 	type FocusId,
 	type Keymap,
 	type ModalId,
@@ -26,6 +30,7 @@ import {
 import * as db from "./services/db.ts";
 import * as promptwriter from "./services/promptwriter.ts";
 import * as claudevision from "./services/claudevision.ts";
+import * as imageengine from "./services/imageengine.ts";
 import type { PromptWriterModelInfo } from "./services/promptwriter.ts";
 import type { AspectRatio } from "./services/types.ts";
 
@@ -36,13 +41,17 @@ export function App() {
 	const refs = useReferences();
 	const gens = useGenerations();
 	const engine = useImageEngine();
+	const [reloadToken, setReloadToken] = useState(0);
+	const vision = useVisionStatus(reloadToken);
 
 	const [focus, setFocus] = useState<FocusId>("gallery");
 	const [modal, setModal] = useState<ModalId>(null);
 	const [draft, setDraft] = useState("");
+	const [intent, setIntent] = useState("");
 	const [model, setModel] = useState<PromptWriterModelInfo | null>(null);
 	const [aspectRatio, setAspectRatio] = useState<AspectRatio | null>(null);
 	const [visionBusy, setVisionBusy] = useState(false);
+	const [enrichBusy, setEnrichBusy] = useState(false);
 	const [visionError, setVisionError] = useState<string | null>(null);
 	const [message, setMessage] = useState<StatusMessage | null>(null);
 	const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,17 +98,26 @@ export function App() {
 			Number.parseInt(m[1], 10),
 		);
 		const generationRefIds: string[] = [];
+		const promptOnlyRefIds: string[] = [];
 		for (const n of tokens) {
 			const r = refs.getAtTag(n);
-			if (r) generationRefIds.push(r.id);
+			if (!r) continue;
+			const intent = refs.intentMap.get(r.id) ?? "generation";
+			if (intent === "prompt-only") {
+				promptOnlyRefIds.push(r.id);
+			} else {
+				generationRefIds.push(r.id);
+			}
 		}
 		await gens.generate({
 			prompt: templated,
 			modelId: model.wisGateModel,
 			generationRefIds,
+			promptOnlyRefIds,
 			aspectRatio: aspectRatio ?? undefined,
 		});
-	}, [draft, model, refs, gens, aspectRatio]);
+		await engine.refreshBudget();
+	}, [draft, model, refs, gens, aspectRatio, engine]);
 
 	const visionDraft = useCallback(async () => {
 		const target = refs.references[refs.selectedIndex];
@@ -125,18 +143,66 @@ export function App() {
 		}
 	}, [refs, model]);
 
-	const useHighlightedAsRef = useCallback(async () => {
+	const draftPromptFromIntent = useCallback(async () => {
+		if (!model) {
+			flash("Pick a model first (m).", "warn");
+			return;
+		}
+		if (!intent.trim()) {
+			flash("Type your intent first (in the Intent box).", "warn");
+			return;
+		}
+		const inputs: string[] = [];
+		const draftOnly: string[] = [];
+		for (const ref of refs.references) {
+			const i = refs.intentMap.get(ref.id) ?? "generation";
+			if (i === "prompt-only") draftOnly.push(ref.path);
+			else inputs.push(ref.path);
+		}
+		setEnrichBusy(true);
+		try {
+			const drafted = await promptwriter.draftFromRefs(intent, model.model, {
+				inputs,
+				draftOnly,
+			});
+			setDraft(drafted);
+			flash(
+				`Drafted from ${inputs.length} input · ${draftOnly.length} draft-only`,
+				"info",
+			);
+		} catch (e) {
+			flash(`Draft failed: ${(e as Error).message}`, "error", 3000);
+		} finally {
+			setEnrichBusy(false);
+		}
+	}, [intent, model, refs.references, refs.intentMap, flash]);
+
+	const toggleSelectedIntent = useCallback(() => {
 		const target = refs.references[refs.selectedIndex];
-		if (!target) return;
-		if (target.source === "generation-copy") {
+		if (!target) {
+			flash("Nothing selected to toggle.", "warn");
+			return;
+		}
+		const next = refs.toggleIntent(target.id);
+		flash(
+			`@${refs.selectedIndex + 1} → ${next === "prompt-only" ? "draft" : "gen"}`,
+			"info",
+		);
+	}, [refs, flash]);
+
+	const useLatestAsRef = useCallback(async () => {
+		const id = gens.latestId();
+		if (!id) {
+			flash("No generations yet — generate one first.", "warn");
 			return;
 		}
 		try {
-			await refs.addFromGeneration(target.id);
-		} catch {
-			// already an upload/pinterest row — nothing to do
+			await refs.addFromGeneration(id);
+			flash("Latest generation added to gallery.", "info");
+		} catch (e) {
+			flash(`Promote failed: ${(e as Error).message}`, "error", 3000);
 		}
-	}, [refs]);
+	}, [refs, gens, flash]);
 
 	const removeHighlighted = useCallback(() => {
 		const target = refs.references[refs.selectedIndex];
@@ -153,33 +219,47 @@ export function App() {
 		}
 	}, [refs, flash]);
 
-	const clearAll = useCallback(async () => {
+	const clearGalleryAndPrompt = useCallback(async () => {
 		try {
-			const img = db.deleteAllImages();
-			const gen = db.deleteAllGenerations();
-			const uploadOrphans = db.purgeUploadOrphans();
-			const downloadOrphans = db.purgeDownloadOrphans();
+			const r = db.deleteImagesBySource("upload");
+			setDraft("");
 			refs.refresh();
-			gens.refresh();
-			flash(
-				`Cleared ${img.rows} images, ${gen.rows} generations (${img.files + gen.files + uploadOrphans + downloadOrphans} files)`,
-				"info",
-				2500,
-			);
+			flash(`Cleared ${r.rows} uploads, prompt reset`, "info");
 		} catch (e) {
 			flash(`Clear failed: ${(e as Error).message}`, "error", 3000);
 		}
-	}, [refs, gens, flash]);
+	}, [refs, flash]);
+
+	const reloadTools = useCallback(async () => {
+		flash("Reloading tools…", "info", 1500);
+		claudevision.__resetProbeCache();
+		setReloadToken((n) => n + 1);
+		try {
+			await imageengine.restart({ silent: true });
+			await engine.refreshBudget();
+			flash("Tools reloaded — fresh keys + vision probe", "info", 2200);
+		} catch (e) {
+			flash(`Reload failed: ${(e as Error).message}`, "error", 3000);
+		}
+	}, [engine, flash]);
 
 	const galleryKeymap = useMemo<Keymap>(
 		() => ({
 			j: () => refs.selectDelta(1),
 			k: () => refs.selectDelta(-1),
+			[KEY_SENTINELS.arrowDown]: () => refs.selectDelta(1),
+			[KEY_SENTINELS.arrowUp]: () => refs.selectDelta(-1),
 			u: () => {
-				void useHighlightedAsRef();
+				void useLatestAsRef();
 			},
 			v: () => {
 				void visionDraft();
+			},
+			w: () => {
+				void draftPromptFromIntent();
+			},
+			t: () => {
+				toggleSelectedIntent();
 			},
 			g: () => {
 				void generateNow();
@@ -188,28 +268,39 @@ export function App() {
 				removeHighlighted();
 			},
 		}),
-		[refs, useHighlightedAsRef, visionDraft, generateNow, removeHighlighted],
+		[
+			refs,
+			useLatestAsRef,
+			visionDraft,
+			draftPromptFromIntent,
+			toggleSelectedIntent,
+			generateNow,
+			removeHighlighted,
+		],
 	);
 
 	const promptKeymap = useMemo<Keymap>(() => ({}), []);
 
-	const [genIndex, setGenIndex] = useState(0);
-
-	// Snap back to the newest generation whenever one arrives.
-	const newestGenId = gens.generations[0]?.id ?? null;
-	useEffect(() => {
-		setGenIndex(0);
-	}, [newestGenId]);
+	const pinned = usePinnedGenIndex({
+		generations: gens.generations,
+		onNewer: () =>
+			flash(
+				"New generation ready — Tab → preview, then End to jump",
+				"info",
+				2500,
+			),
+	});
+	const { genIndex, jumpToNewest, stepForward, stepBack } = pinned;
 
 	const previewKeymap = useMemo<Keymap>(
 		() => ({
-			j: () =>
-				setGenIndex((i) =>
-					Math.min(i + 1, Math.max(0, gens.generations.length - 1)),
-				),
-			k: () => setGenIndex((i) => Math.max(0, i - 1)),
+			j: stepForward,
+			k: stepBack,
+			[KEY_SENTINELS.arrowDown]: stepForward,
+			[KEY_SENTINELS.arrowUp]: stepBack,
+			[KEY_SENTINELS.end]: jumpToNewest,
 		}),
-		[gens.generations.length],
+		[stepForward, stepBack, jumpToNewest],
 	);
 
 	const captureMode = focus === "prompt" && !modal;
@@ -230,9 +321,14 @@ export function App() {
 		paneKeymap,
 		captureMode,
 		onInvalidKey: (reason) => flash(reason, "warn", 1800),
+		onReloadTools: () => {
+			void reloadTools();
+		},
 	});
 
 	const selectedGeneration = gens.generations[genIndex] ?? null;
+	const hasFresherGen =
+		genIndex > 0 && gens.generations.length > 0;
 
 	const modelLabel = model
 		? `${model.model} (${model.wisGateModel})`
@@ -243,13 +339,30 @@ export function App() {
 			<Header title="Pinboard" subtitle="Reference — Generate — Iterate" />
 
 			{modal === null ? (
-				<Box flexDirection="row" marginTop={1} gap={1}>
-					<Gallery
-						references={refs.references}
-						selectedIndex={refs.selectedIndex}
-						focused={focus === "gallery"}
-						cardProps={{ width: "30%", flexShrink: 0 }}
-					/>
+				<Box flexDirection="column" marginTop={1} gap={1}>
+					<Box flexDirection="row" gap={1}>
+						<Gallery
+							references={refs.references}
+							selectedIndex={refs.selectedIndex}
+							focused={focus === "gallery"}
+							intentMap={refs.intentMap}
+							cardProps={{ width: "40%", flexShrink: 0 }}
+						/>
+
+						<Preview
+							generation={selectedGeneration}
+							inFlight={gens.inFlight}
+							lastError={gens.lastError}
+							focused={focus === "preview"}
+							position={
+								gens.generations.length > 0
+									? { index: genIndex, total: gens.generations.length }
+									: null
+							}
+							hasFresher={hasFresherGen}
+							cardProps={{ flexGrow: 1 }}
+						/>
+					</Box>
 
 					<PromptPanel
 						focused={focus === "prompt"}
@@ -259,26 +372,19 @@ export function App() {
 							setDraft(value);
 							setFocus("gallery");
 						}}
+						onDraftCancel={() => setFocus("gallery")}
+						intent={intent}
+						onIntentChange={setIntent}
 						selectedModelLabel={modelLabel}
-						visionBusy={visionBusy}
+						visionBusy={visionBusy || enrichBusy}
 						inFlight={gens.inFlight}
 						lastError={gens.lastError ?? visionError}
 						references={refs.references}
-						cardProps={{ flexGrow: 1 }}
+						intentMap={refs.intentMap}
+						cardProps={{ width: "100%" }}
 					/>
 
-					<Preview
-						generation={selectedGeneration}
-						inFlight={gens.inFlight}
-						lastError={gens.lastError}
-						focused={focus === "preview"}
-						position={
-							gens.generations.length > 0
-								? { index: genIndex, total: gens.generations.length }
-								: null
-						}
-						cardProps={{ width: "30%", flexShrink: 0 }}
-					/>
+					<CommandHints focus={focus} />
 				</Box>
 			) : (
 				<Box marginTop={1} flexDirection="column" alignItems="center">
@@ -317,7 +423,7 @@ export function App() {
 					) : null}
 					{modal === "clear-confirm" ? (
 						<ClearConfirmModal
-							onConfirm={clearAll}
+							onConfirm={clearGalleryAndPrompt}
 							onClose={() => {
 								setModal(null);
 								setFocus("gallery");
@@ -348,6 +454,8 @@ export function App() {
 					budget={engine.budget}
 					version={VERSION}
 					message={message}
+					visionStatus={vision.status}
+					visionReason={vision.reason}
 				/>
 			</Box>
 		</Box>

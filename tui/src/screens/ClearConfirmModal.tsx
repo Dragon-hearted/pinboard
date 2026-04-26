@@ -30,23 +30,26 @@ export function ClearConfirmModal({ onConfirm, onClose }: ClearConfirmModalProps
 
 	return (
 		<Card borderColor={colors.mutedRust} width="60%">
-			<Text color={colors.mutedRust}>{caption("Clear everything")}</Text>
+			<Text color={colors.mutedRust}>
+				{caption("Clear gallery uploads + prompt")}
+			</Text>
 			<Box marginTop={1} flexDirection="column">
 				<Text color={colors.warmParchment}>
-					This deletes ALL uploaded images, ALL Pinterest downloads,
-					ALL generation copies, and every row in the local database.
+					Clear gallery uploads + prompt? Generation history kept.
 				</Text>
 				<Box marginTop={1}>
 					<Text color={colors.stoneGray}>
-						{caption("Files on disk are removed too. This cannot be undone.")}
+						{caption(
+							"Removes upload-source images and resets the prompt draft. Generations remain.",
+						)}
 					</Text>
 				</Box>
 				<Box marginTop={1}>
 					{busy ? (
-						<Spinner label="Wiping…" />
+						<Spinner label="Clearing…" />
 					) : (
 						<Text color={colors.stoneGray}>
-							{caption("y / Enter wipe · n / Esc cancel")}
+							{caption("y / Enter clear · n / Esc cancel")}
 						</Text>
 					)}
 				</Box>

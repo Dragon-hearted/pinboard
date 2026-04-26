@@ -18,9 +18,9 @@ const GROUPS: Group[] = [
 		name: "Navigation",
 		bindings: [
 			{ key: "Tab", action: "Cycle gallery → prompt → preview" },
-			{ key: "j / ↓", action: "Next (ref in Gallery, generation in Preview)" },
-			{ key: "k / ↑", action: "Previous (ref in Gallery, generation in Preview)" },
-			{ key: "Enter", action: "Focus prompt" },
+			{ key: "j / ↓", action: "Next ref (Gallery) or generation (Preview)" },
+			{ key: "k / ↑", action: "Previous ref (Gallery) or generation (Preview)" },
+			{ key: "End", action: "Jump to newest generation (Preview)" },
 		],
 	},
 	{
@@ -29,20 +29,34 @@ const GROUPS: Group[] = [
 			{ key: "a", action: "Add file reference" },
 			{ key: "p", action: "Import Pinterest URL" },
 			{ key: "m", action: "Pick model" },
+			{ key: "r", action: "Pick aspect ratio" },
+			{ key: "Ctrl+J", action: "Insert newline in prompt editor (portable)" },
+			{
+				key: "Shift+Enter",
+				action: "Insert newline (kitty/wezterm/xterm w/ modifyOtherKeys only)",
+			},
 		],
 	},
 	{
 		name: "Actions",
 		bindings: [
-			{ key: "v", action: "Vision draft prompt" },
-			{ key: "g", action: "Generate from prompt" },
-			{ key: "r", action: "Use highlighted as ref" },
+			{ key: "v", action: "Vision draft from selected ref (legacy single-image)" },
+			{
+				key: "w",
+				action: "Draft full prompt from intent + tagged refs (vision)",
+			},
+			{ key: "t", action: "Toggle highlighted ref intent: IN ↔ DRAFT" },
+			{ key: "u", action: "Promote latest generation to gallery as a ref" },
+			{ key: "g", action: "Generate image from current prompt" },
+			{ key: "d", action: "Remove highlighted ref from gallery (file kept)" },
+			{ key: "x", action: "Clear gallery uploads + prompt draft (files kept)" },
 		],
 	},
 	{
 		name: "Meta",
 		bindings: [
 			{ key: "?", action: "Toggle help" },
+			{ key: "R", action: "Reload tools — restart image-engine + reset vision probe" },
 			{ key: "Esc", action: "Exit edit / close modal" },
 			{ key: "q", action: "Quit" },
 		],

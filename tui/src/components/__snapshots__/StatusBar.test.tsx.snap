@@ -1,0 +1,25 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`StatusBar budget rendering under 80% — neutral tones, used % + remaining $ visible 1`] = `
+"────────────────────────────────────────────────────────────────────────────────────────────────────
+ ● ENGINE up    MODEL gemini-3-pro-image-preview    RATIO Auto    VISION ready        pinboard
+ BUDGET $2.00 / $10.00 (used 20%) · remaining $8.00                                   0.1.0
+ A  ADD  ·  P  PIN  ·  D  DEL  ·  X  CLEAR  ·  V  VISION  ·  G  GEN  ·  R  RATIO  ·  U  REF  ·  M
+ MODEL  ·  ?  HELP  ·  Q  QUIT"
+`;
+
+exports[`StatusBar budget rendering 80–99% — warning tones 1`] = `
+"────────────────────────────────────────────────────────────────────────────────────────────────────
+ ● ENGINE up    MODEL gemini-3-pro-image-preview    RATIO Auto    VISION ready        pinboard
+ BUDGET $9.00 / $10.00 (used 90%) · remaining $1.00                                   0.1.0
+ A  ADD  ·  P  PIN  ·  D  DEL  ·  X  CLEAR  ·  V  VISION  ·  G  GEN  ·  R  RATIO  ·  U  REF  ·  M
+ MODEL  ·  ?  HELP  ·  Q  QUIT"
+`;
+
+exports[`StatusBar budget rendering ≥100% — blocked tones, remaining clamps to $0.00 1`] = `
+"────────────────────────────────────────────────────────────────────────────────────────────────────
+ ● ENGINE up    MODEL gemini-3-pro-image-preview    RATIO Auto    VISION ready        pinboard
+ BUDGET $12.00 / $10.00 (used 120%) · remaining $0.00                                 0.1.0
+ A  ADD  ·  P  PIN  ·  D  DEL  ·  X  CLEAR  ·  V  VISION  ·  G  GEN  ·  R  RATIO  ·  U  REF  ·  M
+ MODEL  ·  ?  HELP  ·  Q  QUIT"
+`;

@@ -8,15 +8,19 @@ import { Database } from "bun:sqlite";
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { DOWNLOADS_DIR, UPLOADS_DIR } from "./paths";
-import type { GenerationRecord, ImageRecord } from "./types";
+import type { GenerationRecord, ImageRecord, ImageSource } from "./types";
 
 const DEFAULT_DB_PATH = resolve(
 	import.meta.dir,
 	"../../../pinboard.db",
 );
 
+// Migration `.sql` files in tui/src/migrations/ are documentary only — the
+// runner inlines the equivalent statements below so a stripped/bundled
+// distribution still applies them without depending on the source tree.
 const MIGRATION_FILES = [
 	resolve(import.meta.dir, "../migrations/001_add_source_column.sql"),
+	resolve(import.meta.dir, "../migrations/002_drop_generation_copies.sql"),
 ];
 
 let sharedDb: Database | null = null;
@@ -66,6 +70,10 @@ function runMigrations(db: Database): void {
 	if (!cols.includes("sourceUrl")) {
 		db.exec("ALTER TABLE images ADD COLUMN sourceUrl TEXT");
 	}
+	// 002: clear stale generation-copy mirror rows. Idempotent — runs every
+	// boot. Inlined (parallels 001) so bundled distributions don't silently
+	// no-op when the documentary .sql file is absent from disk.
+	db.exec("DELETE FROM images WHERE source = 'generation-copy'");
 }
 
 /**
@@ -113,45 +121,24 @@ export function insertImage(record: ImageRecord): void {
 }
 
 /**
- * Insert a generation row and mirror it into `images` so the file can be
- * served by any code that reads the images table (preserves old server behaviour).
+ * Insert a generation row. The gallery (`images` table) intentionally does NOT
+ * mirror generations — the user opts in via the `u` hotkey, which copies the
+ * latest generation file into uploads/ and inserts a regular `upload` row.
  */
 export function insertGeneration(record: GenerationRecord): void {
-	const d = db();
-	d.prepare(
-		`INSERT INTO generations (id, prompt, model, resultPath, referenceImageIds, createdAt)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-	).run(
-		record.id,
-		record.prompt,
-		record.model,
-		record.resultPath,
-		record.referenceImageIds,
-		record.createdAt,
-	);
-
-	const ext = record.resultPath.split(".").pop() || "png";
-	const filename = record.resultPath.split("/").pop() || `${record.id}.${ext}`;
-	const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
-	let size = 0;
-	try {
-		size = Bun.file(record.resultPath).size ?? 0;
-	} catch {
-		size = 0;
-	}
-
-	d.prepare(
-		`INSERT OR IGNORE INTO images (id, filename, originalName, path, mimeType, size, createdAt, source, sourceUrl)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, 'generation-copy', NULL)`,
-	).run(
-		record.id,
-		filename,
-		`generated-${record.id}.${ext}`,
-		record.resultPath,
-		mimeType,
-		size,
-		record.createdAt,
-	);
+	db()
+		.prepare(
+			`INSERT INTO generations (id, prompt, model, resultPath, referenceImageIds, createdAt)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+		)
+		.run(
+			record.id,
+			record.prompt,
+			record.model,
+			record.resultPath,
+			record.referenceImageIds,
+			record.createdAt,
+		);
 }
 
 /** List all images newest-first. */
@@ -186,42 +173,42 @@ export function getGeneration(id: string): GenerationRecord | null {
 	);
 }
 
-/** Delete an image row and unlink its backing file if it exists on disk. */
+/**
+ * Delete an image row from the gallery. The backing file under uploads/ is
+ * preserved on disk — gallery deletion is a soft-delete by design so the user
+ * can re-add the same file or recover it manually.
+ */
 export function deleteImage(id: string): void {
-	const d = db();
-	const row = d.prepare("SELECT path FROM images WHERE id = ?").get(id) as
-		| { path: string }
-		| undefined;
-	d.prepare("DELETE FROM images WHERE id = ?").run(id);
-	if (row?.path && existsSync(row.path)) {
-		try {
-			unlinkSync(row.path);
-		} catch {
-			// filesystem already moved/removed — ignore
-		}
-	}
+	db().prepare("DELETE FROM images WHERE id = ?").run(id);
 }
 
 /**
- * Delete every row in `images` and unlink each backing file. Returns the number
- * of disk files actually removed (path existed and unlink succeeded).
+ * Soft-delete every row in `images`. Backing files under uploads/ are NOT
+ * unlinked — gallery clearing is purely about the table state. Use
+ * `purgeUploadOrphans` for an explicit disk sweep.
  */
 export function deleteAllImages(): { rows: number; files: number } {
 	const d = db();
-	const rows = d.prepare("SELECT path FROM images").all() as { path: string }[];
-	let files = 0;
-	for (const r of rows) {
-		if (r.path && existsSync(r.path)) {
-			try {
-				unlinkSync(r.path);
-				files += 1;
-			} catch {
-				// already gone — ignore
-			}
-		}
-	}
+	const rows = (d.prepare("SELECT id FROM images").all() as { id: string }[])
+		.length;
 	d.exec("DELETE FROM images");
-	return { rows: rows.length, files };
+	return { rows, files: 0 };
+}
+
+/**
+ * Soft-delete `images` rows matching `source`. Backing files are preserved.
+ */
+export function deleteImagesBySource(
+	source: ImageSource,
+): { rows: number; files: number } {
+	const d = db();
+	const rows = (
+		d.prepare("SELECT id FROM images WHERE source = ?").all(source) as {
+			id: string;
+		}[]
+	).length;
+	d.prepare("DELETE FROM images WHERE source = ?").run(source);
+	return { rows, files: 0 };
 }
 
 /**
