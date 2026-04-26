@@ -36,6 +36,13 @@ export function MultilineEditor({
 		return { row, col: init[row]?.length ?? 0 };
 	});
 
+	// Refs are written synchronously inside `commit` and the cursor-only
+	// movers below so consecutive handler invocations within the same React
+	// batch (e.g. ink's useInput firing 'readable' then our raw-stdin 'data'
+	// listener firing for the same chunk, or two chunks arriving on the same
+	// tick) read the post-update buffer instead of stale state. The
+	// useEffect-based syncs stay as a belt-and-suspenders for any external
+	// state mutation paths.
 	const linesRef = useRef(lines);
 	const cursorRef = useRef(cursor);
 	useEffect(() => {
@@ -52,12 +59,20 @@ export function MultilineEditor({
 
 	const commit = useCallback(
 		(nextLines: string[], nextCursor: Cursor) => {
+			linesRef.current = nextLines;
+			cursorRef.current = nextCursor;
 			setLines(nextLines);
 			setCursor(nextCursor);
 			onChangeRef.current?.(nextLines.join("\n"));
 		},
 		[],
 	);
+
+	// Cursor-only mutator that keeps `cursorRef` in lock-step with state.
+	const setCursorSync = useCallback((next: Cursor) => {
+		cursorRef.current = next;
+		setCursor(next);
+	}, []);
 
 	const insertText = useCallback(
 		(text: string) => {
@@ -135,55 +150,56 @@ export function MultilineEditor({
 	const moveLeft = useCallback(() => {
 		const cur = cursorRef.current;
 		if (cur.col > 0) {
-			setCursor({ row: cur.row, col: cur.col - 1 });
+			setCursorSync({ row: cur.row, col: cur.col - 1 });
 			return;
 		}
 		if (cur.row === 0) return;
 		const prev = linesRef.current[cur.row - 1] ?? "";
-		setCursor({ row: cur.row - 1, col: prev.length });
-	}, []);
+		setCursorSync({ row: cur.row - 1, col: prev.length });
+	}, [setCursorSync]);
 
 	const moveRight = useCallback(() => {
 		const cur = cursorRef.current;
 		const row = linesRef.current[cur.row] ?? "";
 		if (cur.col < row.length) {
-			setCursor({ row: cur.row, col: cur.col + 1 });
+			setCursorSync({ row: cur.row, col: cur.col + 1 });
 			return;
 		}
 		if (cur.row >= linesRef.current.length - 1) return;
-		setCursor({ row: cur.row + 1, col: 0 });
-	}, []);
+		setCursorSync({ row: cur.row + 1, col: 0 });
+	}, [setCursorSync]);
 
 	const moveUp = useCallback(() => {
 		const cur = cursorRef.current;
 		if (cur.row === 0) {
-			setCursor({ row: 0, col: 0 });
+			setCursorSync({ row: 0, col: 0 });
 			return;
 		}
 		const prev = linesRef.current[cur.row - 1] ?? "";
-		setCursor({ row: cur.row - 1, col: Math.min(cur.col, prev.length) });
-	}, []);
+		setCursorSync({ row: cur.row - 1, col: Math.min(cur.col, prev.length) });
+	}, [setCursorSync]);
 
 	const moveDown = useCallback(() => {
 		const cur = cursorRef.current;
 		if (cur.row >= linesRef.current.length - 1) {
 			const row = linesRef.current[cur.row] ?? "";
-			setCursor({ row: cur.row, col: row.length });
+			setCursorSync({ row: cur.row, col: row.length });
 			return;
 		}
 		const next = linesRef.current[cur.row + 1] ?? "";
-		setCursor({ row: cur.row + 1, col: Math.min(cur.col, next.length) });
-	}, []);
+		setCursorSync({ row: cur.row + 1, col: Math.min(cur.col, next.length) });
+	}, [setCursorSync]);
 
 	const moveHome = useCallback(() => {
-		setCursor((c) => ({ row: c.row, col: 0 }));
-	}, []);
+		const cur = cursorRef.current;
+		setCursorSync({ row: cur.row, col: 0 });
+	}, [setCursorSync]);
 
 	const moveEnd = useCallback(() => {
 		const cur = cursorRef.current;
 		const row = linesRef.current[cur.row] ?? "";
-		setCursor({ row: cur.row, col: row.length });
-	}, []);
+		setCursorSync({ row: cur.row, col: row.length });
+	}, [setCursorSync]);
 
 	const killToEnd = useCallback(() => {
 		const cur = cursorRef.current;

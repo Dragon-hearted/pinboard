@@ -134,19 +134,26 @@ export async function restart(
 	})();
 
 	let pids: string[] = [];
+	let lsofAvailable = false;
 	try {
 		const lsof = spawnSync("lsof", ["-i", `:${port}`, "-t"], {
 			encoding: "utf8",
 		});
-		pids = (lsof.stdout || "")
-			.split("\n")
-			.map((s) => s.trim())
-			.filter(Boolean);
-		for (const pid of pids) {
-			spawnSync("kill", [pid]);
+		// `lsof` exits 0 when it finds a listener and 1 when it doesn't —
+		// either is "lsof itself ran fine". Anything that throws (ENOENT) or
+		// emits a system-level error is treated as unavailable.
+		if (lsof.error == null && (lsof.status === 0 || lsof.status === 1)) {
+			lsofAvailable = true;
+			pids = (lsof.stdout || "")
+				.split("\n")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			for (const pid of pids) {
+				spawnSync("kill", [pid]);
+			}
 		}
 	} catch {
-		// lsof unavailable — best-effort, fall through to ensureUp
+		// lsof unavailable — handled below.
 	}
 
 	const start = Date.now();
@@ -156,11 +163,24 @@ export async function restart(
 		await new Promise((r) => setTimeout(r, 200));
 	}
 
-	// SIGTERM grace expired but the old subprocess is still answering. Escalate
-	// to SIGKILL — without this, ensureUp() would short-circuit on the stale
-	// subprocess and report "reload" success while the old WISDOM_GATE_KEY
-	// stays in memory. See knowledge/key-rotation.md.
-	if (pids.length > 0 && (await healthCheck())) {
+	// SIGTERM grace expired but the old subprocess is still answering. Without
+	// escalation, ensureUp() would short-circuit on the stale subprocess and
+	// report "reload" success while the old WISDOM_GATE_KEY stays in memory.
+	// See knowledge/key-rotation.md.
+	if (await healthCheck()) {
+		if (pids.length === 0) {
+			// Either lsof was unavailable, or it ran but the listener is held
+			// by a process we don't own / can't see. Either way we cannot
+			// guarantee the old subprocess is replaced — fail loudly rather
+			// than mislead the caller.
+			const reason = lsofAvailable
+				? "lsof returned no PID for the port — listener may be held by another user or container"
+				: "lsof unavailable on this system";
+			throw new Error(
+				`ImageEngine on :${port} still answering after SIGTERM and ${reason}. ` +
+					`Kill manually before reloading: lsof -i :${port} -t | xargs kill -9 (or platform equivalent)`,
+			);
+		}
 		for (const pid of pids) {
 			spawnSync("kill", ["-KILL", pid]);
 		}

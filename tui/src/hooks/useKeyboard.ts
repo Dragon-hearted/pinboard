@@ -30,7 +30,11 @@ export type KeyHandler = (input: string, key: Key) => void;
 /**
  * All-false `Key` value. Used when synthesising sentinel handler invocations
  * from raw stdin (Home/End escape sequences) where ink's parsed `key` is not
- * available. Centralised so it stays exhaustive if ink's `Key` type grows.
+ * available. Exhaustive against ink 5.2.1's 14-field `Key` (no `home`, `end`,
+ * `super`, `hyper`, `capsLock`, `numLock` — those land in newer ink majors and
+ * would currently fail TypeScript's excess-property check). If a future ink
+ * upgrade adds required fields, the literal will fail to compile and force
+ * this list to be re-synced — that compile error is the safety net.
  */
 const EMPTY_KEY: Key = {
 	upArrow: false,
