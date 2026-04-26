@@ -30,6 +30,7 @@ import {
 import * as db from "./services/db.ts";
 import * as promptwriter from "./services/promptwriter.ts";
 import * as claudevision from "./services/claudevision.ts";
+import * as imageengine from "./services/imageengine.ts";
 import type { PromptWriterModelInfo } from "./services/promptwriter.ts";
 import type { AspectRatio } from "./services/types.ts";
 
@@ -45,6 +46,7 @@ export function App() {
 	const [focus, setFocus] = useState<FocusId>("gallery");
 	const [modal, setModal] = useState<ModalId>(null);
 	const [draft, setDraft] = useState("");
+	const [intent, setIntent] = useState("");
 	const [model, setModel] = useState<PromptWriterModelInfo | null>(null);
 	const [aspectRatio, setAspectRatio] = useState<AspectRatio | null>(null);
 	const [visionBusy, setVisionBusy] = useState(false);
@@ -140,25 +142,39 @@ export function App() {
 		}
 	}, [refs, model]);
 
-	const enhanceDraft = useCallback(async () => {
-		if (!draft.trim() || !model) {
-			flash("Type a prompt draft first.", "warn");
+	const draftPromptFromIntent = useCallback(async () => {
+		if (!model) {
+			flash("Pick a model first (m).", "warn");
 			return;
 		}
-		const target = refs.references[refs.selectedIndex] ?? null;
+		if (!intent.trim()) {
+			flash("Type your intent first (in the Intent box).", "warn");
+			return;
+		}
+		const inputs: string[] = [];
+		const draftOnly: string[] = [];
+		for (const ref of refs.references) {
+			const i = refs.intentMap.get(ref.id) ?? "generation";
+			if (i === "prompt-only") draftOnly.push(ref.path);
+			else inputs.push(ref.path);
+		}
 		setEnrichBusy(true);
 		try {
-			const enriched = await promptwriter.enrichWithGuide(draft, model.model, {
-				imagePath: target?.path,
+			const drafted = await promptwriter.draftFromRefs(intent, model.model, {
+				inputs,
+				draftOnly,
 			});
-			setDraft(enriched);
-			flash("Prompt enriched.", "info");
+			setDraft(drafted);
+			flash(
+				`Drafted from ${inputs.length} input · ${draftOnly.length} draft-only`,
+				"info",
+			);
 		} catch (e) {
-			flash(`Enrich failed: ${(e as Error).message}`, "error", 3000);
+			flash(`Draft failed: ${(e as Error).message}`, "error", 3000);
 		} finally {
 			setEnrichBusy(false);
 		}
-	}, [draft, model, refs.references, refs.selectedIndex, flash]);
+	}, [intent, model, refs.references, refs.intentMap, flash]);
 
 	const toggleSelectedIntent = useCallback(() => {
 		const target = refs.references[refs.selectedIndex];
@@ -173,18 +189,19 @@ export function App() {
 		);
 	}, [refs, flash]);
 
-	const useHighlightedAsRef = useCallback(async () => {
-		const target = refs.references[refs.selectedIndex];
-		if (!target) return;
-		if (target.source === "generation-copy") {
+	const useLatestAsRef = useCallback(async () => {
+		const id = gens.latestId();
+		if (!id) {
+			flash("No generations yet — generate one first.", "warn");
 			return;
 		}
 		try {
-			await refs.addFromGeneration(target.id);
-		} catch {
-			// already an upload/pinterest row — nothing to do
+			await refs.addFromGeneration(id);
+			flash("Latest generation added to gallery.", "info");
+		} catch (e) {
+			flash(`Promote failed: ${(e as Error).message}`, "error", 3000);
 		}
-	}, [refs]);
+	}, [refs, gens, flash]);
 
 	const removeHighlighted = useCallback(() => {
 		const target = refs.references[refs.selectedIndex];
@@ -212,6 +229,18 @@ export function App() {
 		}
 	}, [refs, flash]);
 
+	const reloadTools = useCallback(async () => {
+		flash("Reloading tools…", "info", 1500);
+		claudevision.__resetProbeCache();
+		try {
+			await imageengine.restart({ silent: true });
+			await engine.refreshBudget();
+			flash("Tools reloaded — fresh keys + vision probe", "info", 2200);
+		} catch (e) {
+			flash(`Reload failed: ${(e as Error).message}`, "error", 3000);
+		}
+	}, [engine, flash]);
+
 	const galleryKeymap = useMemo<Keymap>(
 		() => ({
 			j: () => refs.selectDelta(1),
@@ -219,13 +248,13 @@ export function App() {
 			[KEY_SENTINELS.arrowDown]: () => refs.selectDelta(1),
 			[KEY_SENTINELS.arrowUp]: () => refs.selectDelta(-1),
 			u: () => {
-				void useHighlightedAsRef();
+				void useLatestAsRef();
 			},
 			v: () => {
 				void visionDraft();
 			},
 			w: () => {
-				void enhanceDraft();
+				void draftPromptFromIntent();
 			},
 			t: () => {
 				toggleSelectedIntent();
@@ -239,9 +268,9 @@ export function App() {
 		}),
 		[
 			refs,
-			useHighlightedAsRef,
+			useLatestAsRef,
 			visionDraft,
-			enhanceDraft,
+			draftPromptFromIntent,
 			toggleSelectedIntent,
 			generateNow,
 			removeHighlighted,
@@ -290,6 +319,9 @@ export function App() {
 		paneKeymap,
 		captureMode,
 		onInvalidKey: (reason) => flash(reason, "warn", 1800),
+		onReloadTools: () => {
+			void reloadTools();
+		},
 	});
 
 	const selectedGeneration = gens.generations[genIndex] ?? null;
@@ -339,11 +371,14 @@ export function App() {
 							setFocus("gallery");
 						}}
 						onDraftCancel={() => setFocus("gallery")}
+						intent={intent}
+						onIntentChange={setIntent}
 						selectedModelLabel={modelLabel}
 						visionBusy={visionBusy || enrichBusy}
 						inFlight={gens.inFlight}
 						lastError={gens.lastError ?? visionError}
 						references={refs.references}
+						intentMap={refs.intentMap}
 						cardProps={{ width: "100%" }}
 					/>
 

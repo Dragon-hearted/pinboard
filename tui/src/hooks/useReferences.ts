@@ -185,30 +185,39 @@ export function useReferences(): UseReferencesApi {
 
 	const addFromGeneration = useCallback(
 		async (genId: string): Promise<ImageRecord> => {
-			// Generation rows are already mirror-inserted into `images` by
-			// `db.insertGeneration`. If caller wants to pull a base64 copy from
-			// ImageEngine (e.g. for a generation not yet mirrored), ask the service.
-			const existing = db.getImage(genId);
-			if (existing) {
-				refresh();
-				return existing;
-			}
-			const payload = await imageengine.useAsReference(genId);
-			const ext = payload.mimeType.split("/")[1] ?? "png";
-			const id = randomUUID();
+			// Promote a generation into the gallery as a regular upload. Prefers
+			// the local downloads/ copy written by useGenerations; falls back to
+			// the ImageEngine base64 endpoint if the local file vanished.
 			const dir = ensureUploadsDir();
-			const filename = `${id}.${ext}`;
-			const dest = `${dir}/${filename}`;
-			await Bun.write(dest, Buffer.from(payload.data, "base64"));
+			const id = randomUUID();
+			const gen = db.getGeneration(genId);
+
+			let dest: string;
+			let mimeType: string;
+			let ext: string;
+
+			if (gen && existsSync(gen.resultPath)) {
+				ext = extname(gen.resultPath).slice(1).toLowerCase() || "png";
+				mimeType = EXT_MIME[ext] ?? `image/${ext}`;
+				dest = `${dir}/${id}.${ext}`;
+				copyFileSync(gen.resultPath, dest);
+			} else {
+				const payload = await imageengine.useAsReference(genId);
+				ext = payload.mimeType.split("/")[1] ?? "png";
+				mimeType = payload.mimeType;
+				dest = `${dir}/${id}.${ext}`;
+				await Bun.write(dest, Buffer.from(payload.data, "base64"));
+			}
+
 			const record: ImageRecord = {
 				id,
-				filename,
-				originalName: `generation-${genId}.${ext}`,
+				filename: `${id}.${ext}`,
+				originalName: `generation-${genId.slice(0, 8)}.${ext}`,
 				path: dest,
-				mimeType: payload.mimeType,
+				mimeType,
 				size: Bun.file(dest).size ?? 0,
 				createdAt: new Date().toISOString(),
-				source: "generation-copy",
+				source: "upload",
 				sourceUrl: null,
 			};
 			db.insertImage(record);

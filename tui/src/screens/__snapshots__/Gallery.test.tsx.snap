@@ -6,13 +6,13 @@ exports[`Gallery renders three refs with chevron on selected row only and gen/dr
 │ GALLERY                                                                                   focus  │
 │                                                                                                  │
 │   @1 alpha.png                                                                                   │
-│   UPLOAD  GEN                                                                                    │
+│   UPLOAD  IN                                                                                     │
 │                                                                                                  │
 │ ▶ @2  beta.png                                                                                   │
 │   UPLOAD  DRAFT                                                                                  │
 │                                                                                                  │
 │   @3 gamma.png                                                                                   │
-│   UPLOAD  GEN                                                                                    │
+│   UPLOAD  IN                                                                                     │
 │                                                                                                  │
 │                                                                                                  │
 │ SELECTED                                                                                         │

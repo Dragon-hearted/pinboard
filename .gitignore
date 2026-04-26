@@ -8,3 +8,4 @@ downloads/
 *.db-shm
 .DS_Store
 logs/
+.claude/

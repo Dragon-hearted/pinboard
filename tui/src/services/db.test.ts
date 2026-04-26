@@ -80,7 +80,9 @@ describe("db", () => {
 		expect(got?.source).toBe("upload");
 	});
 
-	test("insertGeneration mirrors a row into images table", () => {
+	test("insertGeneration does NOT mirror into images table", () => {
+		// Gallery represents user-uploaded refs only — generations stay in
+		// the generations table until the user explicitly promotes one via `u`.
 		fresh();
 		insertGeneration({
 			id: "gen-1",
@@ -92,10 +94,7 @@ describe("db", () => {
 		});
 
 		expect(listGenerations()).toHaveLength(1);
-		const mirror = getImage("gen-1");
-		expect(mirror).not.toBeNull();
-		expect(mirror?.source).toBe("generation-copy");
-		expect(mirror?.path).toBe("/tmp/gen-1.png");
+		expect(getImage("gen-1")).toBeNull();
 	});
 
 	test("listImages orders by createdAt DESC", () => {
@@ -153,7 +152,9 @@ describe("db", () => {
 			rmSync(tmpDir, { recursive: true, force: true });
 		});
 
-		test("deletes only upload-source rows and unlinks only their files", () => {
+		test("deletes only upload-source rows and preserves files on disk", () => {
+			// Soft-delete: rows are removed but the underlying files stay
+			// on disk so the user can re-add them or recover them manually.
 			fresh();
 			const uploadPath = join(tmpDir, "upload.png");
 			const pinPath = join(tmpDir, "pin.png");
@@ -195,13 +196,13 @@ describe("db", () => {
 
 			const result = deleteImagesBySource("upload");
 			expect(result.rows).toBe(1);
-			expect(result.files).toBe(1);
+			expect(result.files).toBe(0);
 
 			expect(getImage("u1")).toBeNull();
 			expect(getImage("p1")).not.toBeNull();
 			expect(getImage("g1")).not.toBeNull();
 
-			expect(existsSync(uploadPath)).toBe(false);
+			expect(existsSync(uploadPath)).toBe(true);
 			expect(existsSync(pinPath)).toBe(true);
 			expect(existsSync(genPath)).toBe(true);
 		});

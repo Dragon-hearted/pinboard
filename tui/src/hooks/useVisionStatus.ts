@@ -29,13 +29,9 @@ export function useVisionStatus(): UseVisionStatusApi {
 					setReason("claude CLI not on PATH");
 					return;
 				}
-				if (!probe.imageAttachFlag) {
-					setStatus("unavailable");
-					setReason(
-						"claude CLI is installed but no supported image-attach flag detected",
-					);
-					return;
-				}
+				// `imageAttachFlag` always resolves once the binary is present —
+				// `probeClaudeCli` falls back to "@path" (Claude Code's universal
+				// in-prompt file-reference syntax) when --help omits explicit flags.
 				setStatus("ready");
 				setReason(null);
 			} catch (e) {

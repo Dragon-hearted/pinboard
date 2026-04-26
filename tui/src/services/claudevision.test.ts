@@ -179,7 +179,7 @@ describe("probeClaudeCli", () => {
 		expect(result.available).toBe(false);
 	});
 
-	test("available but null flag when help has no known syntax", async () => {
+	test("falls back to @path when help omits explicit image-attach flags", async () => {
 		__setSpawn(
 			makeFakeSpawn([
 				() => ({ stdout: "1.0.0" }),
@@ -188,7 +188,36 @@ describe("probeClaudeCli", () => {
 		);
 		const result = await probeClaudeCli();
 		expect(result.available).toBe(true);
-		expect(result.imageAttachFlag).toBeNull();
+		// Modern Claude Code accepts @<path> mentions inside the prompt — the
+		// probe defaults to "@path" so the vision flows still work even when
+		// --help no longer enumerates explicit attach flags.
+		expect(result.imageAttachFlag).toBe("@path");
+	});
+
+	test("falls back to @path against a real claude 2.1.119-style --help slice", async () => {
+		// Representative slice of `claude --help` output from Claude Code v2.1.119:
+		// no --image, no --attach, no @<path>/@<file> mentions in the option list.
+		const realHelpSlice = [
+			"Usage: claude [options]",
+			"  --bare                                            Minimal mode",
+			"  -d, --debug [filter]                              Enable debug mode",
+			"  --debug-file <path>                               Write debug logs",
+			"  --file <specs...>                                 File resources to download at startup. Format: file_id:relative_path",
+			"  --mcp-config <configs...>                         Load MCP servers",
+			"  --plugin-dir <path>                               Load plugins from a directory",
+			"  --settings <file-or-json>                         Path to a settings JSON file",
+			"  --tools <tools...>                                Specify the list of available tools",
+		].join("\n");
+		__setSpawn(
+			makeFakeSpawn([
+				() => ({ stdout: "2.1.119 (Claude Code)" }),
+				() => ({ stdout: realHelpSlice }),
+			]),
+		);
+		const result = await probeClaudeCli();
+		expect(result.available).toBe(true);
+		expect(result.version).toBe("2.1.119 (Claude Code)");
+		expect(result.imageAttachFlag).toBe("@path");
 	});
 });
 

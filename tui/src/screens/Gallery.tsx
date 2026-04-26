@@ -56,7 +56,7 @@ export function Gallery({
 						const source = (ref.source ?? "upload") as ImageSource;
 						const label = SOURCE_LABEL[source] ?? source;
 						const intent = intentMap?.get(ref.id) ?? "generation";
-						const intentLabel = intent === "prompt-only" ? "draft" : "gen";
+						const intentLabel = intent === "prompt-only" ? "DRAFT" : "IN";
 						const intentColor =
 							intent === "prompt-only"
 								? colors.ashGray

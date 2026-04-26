@@ -48,10 +48,10 @@ describe("Gallery", () => {
 			expect(frame).not.toMatch(/▶\s*@1/);
 			expect(frame).not.toMatch(/▶\s*@3/);
 
-			// Each row carries an intent badge. CAPTION upper-cases letters.
-			const genCount = (frame.match(/G\s*E\s*N(?!\s*E\s*R\s*A)/g) ?? [])
-				.length;
-			expect(genCount).toBeGreaterThanOrEqual(2);
+			// Each row carries an intent badge — IN for generation, DRAFT for prompt-only.
+			// CAPTION letter-spaces them so we match with optional whitespace between glyphs.
+			const inCount = (frame.match(/(?<![A-Z])I\s*N(?![A-Z])/g) ?? []).length;
+			expect(inCount).toBeGreaterThanOrEqual(2);
 			expect(frame).toMatch(/D\s*R\s*A\s*F\s*T/);
 
 			expect(frame).toMatchSnapshot();

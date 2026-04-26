@@ -4,6 +4,9 @@
  * Claude API calls by leveraging the Claude Code subscription.
  */
 
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, resolve } from "node:path";
 import { loadModelGuide } from "./promptwriter";
 
 /** How the detected `claude` CLI accepts an image argument. */
@@ -61,6 +64,27 @@ const ENHANCE_PROMPT_INSTRUCTION =
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
+/** Candidate paths for the `claude` binary when $PATH lookup fails. */
+const BINARY_CANDIDATES = [
+	"claude",
+	`${homedir()}/.claude/local/claude`,
+	"/opt/homebrew/bin/claude",
+	"/usr/local/bin/claude",
+];
+
+const LOG_PATH = resolve(import.meta.dir, "../../../logs/claudevision.log");
+
+/** Append a debug line to logs/claudevision.log; never throws. */
+function logError(line: string): void {
+	try {
+		const dir = dirname(LOG_PATH);
+		if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+		appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${line}\n`);
+	} catch {
+		// log dir missing — ignore so vision flows still complete
+	}
+}
+
 /**
  * Shape of Bun's `Subprocess` we actually consume — narrowed so tests can mock
  * it without simulating the full Bun API surface.
@@ -95,16 +119,10 @@ async function streamToString(
 }
 
 /**
- * Probe the `claude` binary at startup:
- *   1. `claude --version` to confirm presence.
- *   2. `claude --help` to detect which image-attach syntax this version supports.
- *
- * Never throws — missing binary returns `{ available: false, imageAttachFlag: null }`.
+ * Try `--version` against `binary`. Returns the version string on success or
+ * null when the binary is missing / fails. Never throws.
  */
-export async function probeClaudeCli(
-	binary = "claude",
-): Promise<ProbeResult> {
-	let version: string | undefined;
+async function tryVersion(binary: string): Promise<string | null> {
 	try {
 		const proc = spawnImpl([binary, "--version"], {
 			stdout: "pipe",
@@ -115,9 +133,47 @@ export async function probeClaudeCli(
 			streamToString(proc.stdout),
 			proc.exited,
 		]);
-		if (code !== 0) return { available: false, imageAttachFlag: null };
-		version = stdout.trim() || undefined;
+		if (code !== 0) return null;
+		return stdout.trim() || "";
 	} catch {
+		return null;
+	}
+}
+
+/**
+ * Probe the `claude` binary at startup:
+ *   1. `claude --version` to confirm presence (falls through known install
+ *      paths when $PATH lookup fails).
+ *   2. `claude --help` to detect which image-attach syntax this version supports.
+ *
+ * Never throws — missing binary returns `{ available: false, imageAttachFlag: null }`.
+ */
+export async function probeClaudeCli(
+	binary = "claude",
+): Promise<ProbeResult> {
+	let version: string | undefined;
+	const primary = await tryVersion(binary);
+	if (primary !== null) {
+		version = primary || undefined;
+	} else if (binary === "claude") {
+		// $PATH lookup failed — sweep the known install locations so a user
+		// who installed via `~/.claude/local/install.sh` or Homebrew still gets
+		// a working probe without having to fix their shell PATH first.
+		for (const candidate of BINARY_CANDIDATES.slice(1)) {
+			if (!existsSync(candidate)) continue;
+			const v = await tryVersion(candidate);
+			if (v !== null) {
+				version = v || undefined;
+				binary = candidate;
+				break;
+			}
+		}
+		if (version === undefined) {
+			logError(`probe: claude not found on PATH or in ${BINARY_CANDIDATES.slice(1).join(", ")}`);
+			return { available: false, imageAttachFlag: null };
+		}
+	} else {
+		logError(`probe: ${binary} --version failed`);
 		return { available: false, imageAttachFlag: null };
 	}
 
@@ -139,10 +195,17 @@ export async function probeClaudeCli(
 		return { available: true, version, imageAttachFlag: null };
 	}
 
+	// Modern Claude Code (≥2.x) accepts `@<path>` mentions inside the prompt
+	// body — the agent reads referenced files via its built-in Read tool. This
+	// is part of the prompt grammar, not an enumerable CLI flag, so newer
+	// versions no longer print --image/--attach in --help. When the helper
+	// can't find an explicit flag but the binary is verified present, fall
+	// back to "@path" so vision flows still work.
+	const detected = detectImageAttachFlag(helpText);
 	return {
 		available: true,
 		version,
-		imageAttachFlag: detectImageAttachFlag(helpText),
+		imageAttachFlag: detected ?? "@path",
 	};
 }
 
@@ -219,8 +282,14 @@ export async function draftPrompt(opts: DraftPromptOpts): Promise<string> {
 			streamToString(proc.stderr),
 			proc.exited,
 		]);
-		if (timedOut) throw new ClaudeTimeoutError(timeoutMs);
+		if (timedOut) {
+			logError(`draftPrompt: timeout after ${timeoutMs}ms`);
+			throw new ClaudeTimeoutError(timeoutMs);
+		}
 		if (code !== 0) {
+			logError(
+				`draftPrompt: exit ${code}: ${stderr.trim().slice(0, 500) || "<no stderr>"}`,
+			);
 			throw new ClaudeError(
 				`claude CLI exited with code ${code}: ${stderr.trim() || "<no stderr>"}`,
 				code,
@@ -313,8 +382,14 @@ export async function enhancePrompt(opts: EnhancePromptOpts): Promise<string> {
 			streamToString(proc.stderr),
 			proc.exited,
 		]);
-		if (timedOut) throw new ClaudeTimeoutError(timeoutMs);
+		if (timedOut) {
+			logError(`enhancePrompt: timeout after ${timeoutMs}ms`);
+			throw new ClaudeTimeoutError(timeoutMs);
+		}
 		if (code !== 0) {
+			logError(
+				`enhancePrompt: exit ${code}: ${stderr.trim().slice(0, 500) || "<no stderr>"}`,
+			);
 			throw new ClaudeError(
 				`claude CLI exited with code ${code}: ${stderr.trim() || "<no stderr>"}`,
 				code,
@@ -341,5 +416,10 @@ export function probeAtStartup(binary = "claude"): Promise<ProbeResult> {
 
 /** Test hook — clear the cached probe so the next `probeAtStartup` re-runs. */
 export function __resetProbeCache(): void {
+	probeCache = null;
+}
+
+/** Public alias for `__resetProbeCache` — used by the capital-R reload tools hotkey. */
+export function invalidateProbeCache(): void {
 	probeCache = null;
 }

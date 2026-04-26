@@ -3,7 +3,7 @@
  * Adapted from `systems/scene-board/src/image-client.ts` — standalone, no cross-imports.
  */
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import type {
 	BatchRequest,
@@ -115,6 +115,47 @@ export async function ensureUp(
 		`ImageEngine did not come up within ${timeoutMs}ms. ` +
 			`Start it manually: cd systems/image-engine && bun run src/index.ts`,
 	);
+}
+
+/**
+ * Kill any running ImageEngine listening on the configured port and re-launch
+ * a fresh subprocess. Used by the pinboard "reload tools" hotkey when the
+ * user rotates `.env` keys — the new subprocess reads the rotated key.
+ */
+export async function restart(
+	opts: { timeoutMs?: number; silent?: boolean } = {},
+): Promise<void> {
+	const port = (() => {
+		try {
+			return new URL(IMAGE_ENGINE_URL).port || "3002";
+		} catch {
+			return "3002";
+		}
+	})();
+
+	try {
+		const lsof = spawnSync("lsof", ["-i", `:${port}`, "-t"], {
+			encoding: "utf8",
+		});
+		const pids = (lsof.stdout || "")
+			.split("\n")
+			.map((s) => s.trim())
+			.filter(Boolean);
+		for (const pid of pids) {
+			spawnSync("kill", [pid]);
+		}
+	} catch {
+		// lsof unavailable — best-effort, fall through to ensureUp
+	}
+
+	const start = Date.now();
+	const killTimeout = 3000;
+	while (Date.now() - start < killTimeout) {
+		if (!(await healthCheck())) break;
+		await new Promise((r) => setTimeout(r, 200));
+	}
+
+	await ensureUp(opts);
 }
 
 /** POST /api/generate — single image generation. */

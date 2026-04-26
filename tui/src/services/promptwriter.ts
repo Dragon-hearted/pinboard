@@ -3,10 +3,11 @@
  * and apply model-specific templates before sending prompts to ImageEngine.
  */
 
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { listModels as registryListModels } from "../../../../prompt-writer/src/registry";
 import type { ModelEntry } from "../../../../prompt-writer/src/registry";
 import * as claudevision from "./claudevision";
+import * as claudesdk from "./claudesdk";
 import type { WisGateModel } from "./types";
 
 const KNOWLEDGE_DIR = resolve(
@@ -259,6 +260,10 @@ export interface EnrichWithGuideOpts {
  * Rewrite a draft prompt through `claudevision.enhancePrompt`, supplying the
  * model guide's prompt-structure section. Falls back to the deterministic
  * `applyTemplate` formatter when the `claude` CLI is unavailable.
+ *
+ * @deprecated Use `draftFromRefs` instead — the new flow drafts a complete
+ * prompt from the user's intent + reference images rather than rewriting
+ * an existing draft. Kept as a thin shim until the test suite is migrated.
  */
 export async function enrichWithGuide(
 	draft: string,
@@ -278,5 +283,91 @@ export async function enrichWithGuide(
 			return applyTemplate(draft, modelName);
 		}
 		throw err;
+	}
+}
+
+export interface DraftFromRefsOpts {
+	/** Paths attached to the generation call — vision sees these AND the model uses them as inputs. */
+	inputs: string[];
+	/** Paths shown to vision for context only; never sent to the image model. */
+	draftOnly: string[];
+	timeoutMs?: number;
+	binary?: string;
+}
+
+const DRAFT_FROM_REFS_PREAMBLE = [
+	"You are drafting an image-generation prompt.",
+	"Some images are tagged INPUT — they will be sent to the image model as references.",
+	"Other images are tagged DRAFT-ONLY — they are context for you, never sent to the model.",
+	"Read both groups, internalise what the user wants, and produce ONE complete prompt that follows the model's prompt-structure guide.",
+	"Output ONLY the prompt text — no preamble, no commentary.",
+].join(" ");
+
+/**
+ * Draft a complete prompt from the user's intent + reference images. This is
+ * the primary entry point for the new "intent → vision → complete prompt" flow.
+ *
+ * Cascade:
+ *   1. CLI (`claudevision.enhancePrompt`) — preferred, no paid API.
+ *   2. SDK (`claudesdk.draftWithSdk`) — only if `PINBOARD_ALLOW_API=1`.
+ *   3. Deterministic template — last resort, no vision input.
+ */
+export async function draftFromRefs(
+	intent: string,
+	modelName: string,
+	opts: DraftFromRefsOpts,
+): Promise<string> {
+	const guide = await loadModelGuide(modelName).catch(() => null);
+	const promptStructure = guide?.sections.promptStructure ?? "";
+
+	const inputList = opts.inputs.map((p) => `INPUT: ${basename(p)}`).join("\n");
+	const draftList = opts.draftOnly
+		.map((p) => `DRAFT-ONLY: ${basename(p)}`)
+		.join("\n");
+	const refTagging = [inputList, draftList].filter(Boolean).join("\n");
+
+	const composed = [
+		DRAFT_FROM_REFS_PREAMBLE,
+		promptStructure ? `\n--- model prompt structure ---\n${promptStructure}` : "",
+		refTagging ? `\n--- reference tagging ---\n${refTagging}` : "",
+		`\n--- user intent ---\n${intent.trim()}`,
+	]
+		.filter(Boolean)
+		.join("\n");
+
+	const allRefs = [...opts.inputs, ...opts.draftOnly];
+	const primaryRef = allRefs[0]; // CLI flow attaches the first ref; covers the common case.
+
+	try {
+		return await claudevision.enhancePrompt({
+			draft: intent.trim(),
+			modelName,
+			imagePath: primaryRef,
+			timeoutMs: opts.timeoutMs,
+			binary: opts.binary,
+		});
+	} catch (cliErr) {
+		if (claudesdk.sdkEnabled()) {
+			try {
+				return await claudesdk.draftWithSdk({
+					instruction: composed,
+					imagePaths: allRefs,
+				});
+			} catch {
+				// SDK also failed — fall through to deterministic
+			}
+		}
+		// Deterministic fallback: stitch user intent + ref filenames into the
+		// model template. No vision, but never a silent failure.
+		const stub = refTagging
+			? `[refs: ${[...opts.inputs.map((p) => basename(p)), ...opts.draftOnly.map((p) => basename(p))].join(", ")}] `
+			: "";
+		const det = `${stub}${intent.trim()}`;
+		const message =
+			cliErr instanceof claudevision.ClaudeUnavailableError
+				? "vision unavailable"
+				: `vision error: ${(cliErr as Error).message.slice(0, 100)}`;
+		console.warn(`promptwriter.draftFromRefs: ${message} — using deterministic template`);
+		return applyTemplate(det, modelName);
 	}
 }

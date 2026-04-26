@@ -40,19 +40,23 @@ const GROUPS: Group[] = [
 	{
 		name: "Actions",
 		bindings: [
-			{ key: "v", action: "Vision draft prompt from selected ref" },
-			{ key: "w", action: "Enrich prompt via PromptWriter guide" },
-			{ key: "t", action: "Toggle ref intent gen ↔ draft" },
-			{ key: "u", action: "Use highlighted generation as ref" },
-			{ key: "g", action: "Generate from current prompt" },
-			{ key: "d", action: "Delete highlighted ref" },
-			{ key: "x", action: "Clear gallery uploads + prompt draft" },
+			{ key: "v", action: "Vision draft from selected ref (legacy single-image)" },
+			{
+				key: "w",
+				action: "Draft full prompt from intent + tagged refs (vision)",
+			},
+			{ key: "t", action: "Toggle highlighted ref intent: IN ↔ DRAFT" },
+			{ key: "u", action: "Promote latest generation to gallery as a ref" },
+			{ key: "g", action: "Generate image from current prompt" },
+			{ key: "d", action: "Remove highlighted ref from gallery (file kept)" },
+			{ key: "x", action: "Clear gallery uploads + prompt draft (files kept)" },
 		],
 	},
 	{
 		name: "Meta",
 		bindings: [
 			{ key: "?", action: "Toggle help" },
+			{ key: "R", action: "Reload tools — restart image-engine + reset vision probe" },
 			{ key: "Esc", action: "Exit edit / close modal" },
 			{ key: "q", action: "Quit" },
 		],

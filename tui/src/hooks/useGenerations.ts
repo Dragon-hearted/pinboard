@@ -60,6 +60,8 @@ export interface UseGenerationsApi {
 	lastError: string | null;
 	generate(args: GenerateArgs): Promise<GenerationRecord | null>;
 	refresh(): void;
+	/** Newest generation id, or null if none exist. */
+	latestId(): string | null;
 }
 
 export function useGenerations(): UseGenerationsApi {
@@ -139,5 +141,10 @@ export function useGenerations(): UseGenerationsApi {
 		[refresh],
 	);
 
-	return { generations, inFlight, lastError, generate, refresh };
+	const latestId = useCallback(
+		(): string | null => generations[0]?.id ?? null,
+		[generations],
+	);
+
+	return { generations, inFlight, lastError, generate, refresh, latestId };
 }

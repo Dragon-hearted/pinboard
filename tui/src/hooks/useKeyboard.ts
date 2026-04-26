@@ -60,6 +60,8 @@ export interface UseKeyboardOpts {
 	captureMode?: boolean;
 	/** Called when the user presses a key with no binding in the current mode. */
 	onInvalidKey?(reason: string): void;
+	/** Capital-R "reload tools" — restarts image-engine + invalidates vision probe cache. */
+	onReloadTools?(): void;
 }
 
 const PRINTABLE = /^[\x20-\x7e]$/;
@@ -75,6 +77,7 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		modalKeymap,
 		captureMode,
 		onInvalidKey,
+		onReloadTools,
 	} = opts;
 
 	const { stdin, isRawModeSupported } = useStdin();
@@ -160,6 +163,10 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		}
 		if (input === "r") {
 			setModal("aspect-ratio");
+			return;
+		}
+		if (input === "R") {
+			onReloadTools?.();
 			return;
 		}
 		if (input === "x" || input === "X") {
