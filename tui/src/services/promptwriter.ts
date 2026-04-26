@@ -357,10 +357,11 @@ export async function draftFromRefs(
 				// SDK also failed — fall through to deterministic
 			}
 		}
-		// Deterministic fallback: stitch user intent + ref filenames into the
-		// model template. No vision, but never a silent failure.
-		const stub = refTagging
-			? `[refs: ${[...opts.inputs.map((p) => basename(p)), ...opts.draftOnly.map((p) => basename(p))].join(", ")}] `
+		// Deterministic fallback: stitch user intent + INPUT ref filenames into
+		// the model template. DRAFT-ONLY basenames are deliberately excluded —
+		// the preamble's contract is that DRAFT-ONLY never reaches the model.
+		const stub = opts.inputs.length > 0
+			? `[refs: ${opts.inputs.map((p) => basename(p)).join(", ")}] `
 			: "";
 		const det = `${stub}${intent.trim()}`;
 		const message =

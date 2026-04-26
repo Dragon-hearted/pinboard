@@ -27,12 +27,14 @@ Pinboard is a **terminal-first Ink TUI**. The active runtime lives in `tui/src/`
 - **`r`** — aspect-ratio picker modal.
 - **`R`** — reload tools (kill image-engine, reset vision probe). See
   `knowledge/key-rotation.md` for the rotation flow.
-- **`x` / `X`** — clear gallery rows. Files under `uploads/` are preserved on
-  disk — gallery deletion is soft by design.
+- **`x` / `X`** — clear gallery **upload** rows (Pinterest imports are kept).
+  Files under `uploads/` are preserved on disk — gallery deletion is soft by
+  design.
 
 ## Gallery semantics
 
-The gallery (`images` table) represents **user-uploaded references only**.
+The gallery (`images` table) holds user-supplied references — both local
+uploads (`source='upload'`) and Pinterest imports (`source='pinterest'`).
 Generated images live in `generations` and never auto-mirror into the
 gallery. The user opts in to promoting a generation via `u`.
 

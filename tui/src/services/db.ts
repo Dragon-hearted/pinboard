@@ -5,7 +5,7 @@
  */
 
 import { Database } from "bun:sqlite";
-import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { DOWNLOADS_DIR, UPLOADS_DIR } from "./paths";
 import type { GenerationRecord, ImageRecord, ImageSource } from "./types";
@@ -15,6 +15,9 @@ const DEFAULT_DB_PATH = resolve(
 	"../../../pinboard.db",
 );
 
+// Migration `.sql` files in tui/src/migrations/ are documentary only — the
+// runner inlines the equivalent statements below so a stripped/bundled
+// distribution still applies them without depending on the source tree.
 const MIGRATION_FILES = [
 	resolve(import.meta.dir, "../migrations/001_add_source_column.sql"),
 	resolve(import.meta.dir, "../migrations/002_drop_generation_copies.sql"),
@@ -67,15 +70,10 @@ function runMigrations(db: Database): void {
 	if (!cols.includes("sourceUrl")) {
 		db.exec("ALTER TABLE images ADD COLUMN sourceUrl TEXT");
 	}
-	// 002: clear stale generation-copy mirror rows. Idempotent — runs every boot.
-	const path002 = MIGRATION_FILES[1];
-	if (path002 && existsSync(path002)) {
-		try {
-			db.exec(readFileSync(path002, "utf8"));
-		} catch {
-			// schema drift — ignore so the app still starts
-		}
-	}
+	// 002: clear stale generation-copy mirror rows. Idempotent — runs every
+	// boot. Inlined (parallels 001) so bundled distributions don't silently
+	// no-op when the documentary .sql file is absent from disk.
+	db.exec("DELETE FROM images WHERE source = 'generation-copy'");
 }
 
 /**

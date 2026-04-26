@@ -133,11 +133,12 @@ export async function restart(
 		}
 	})();
 
+	let pids: string[] = [];
 	try {
 		const lsof = spawnSync("lsof", ["-i", `:${port}`, "-t"], {
 			encoding: "utf8",
 		});
-		const pids = (lsof.stdout || "")
+		pids = (lsof.stdout || "")
 			.split("\n")
 			.map((s) => s.trim())
 			.filter(Boolean);
@@ -149,10 +150,31 @@ export async function restart(
 	}
 
 	const start = Date.now();
-	const killTimeout = 3000;
-	while (Date.now() - start < killTimeout) {
+	const termGrace = 3000;
+	while (Date.now() - start < termGrace) {
 		if (!(await healthCheck())) break;
 		await new Promise((r) => setTimeout(r, 200));
+	}
+
+	// SIGTERM grace expired but the old subprocess is still answering. Escalate
+	// to SIGKILL — without this, ensureUp() would short-circuit on the stale
+	// subprocess and report "reload" success while the old WISDOM_GATE_KEY
+	// stays in memory. See knowledge/key-rotation.md.
+	if (pids.length > 0 && (await healthCheck())) {
+		for (const pid of pids) {
+			spawnSync("kill", ["-KILL", pid]);
+		}
+		const killStart = Date.now();
+		const killGrace = 2000;
+		while (Date.now() - killStart < killGrace) {
+			if (!(await healthCheck())) break;
+			await new Promise((r) => setTimeout(r, 200));
+		}
+		if (await healthCheck()) {
+			throw new Error(
+				`ImageEngine subprocess on :${port} survived SIGTERM and SIGKILL — kill manually: lsof -i :${port} -t | xargs kill -9`,
+			);
+		}
 	}
 
 	await ensureUp(opts);
