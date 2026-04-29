@@ -1,5 +1,5 @@
 import { Box, Text } from "ink";
-import { colors, caption } from "../theme.ts";
+import { colors, caption, tokens } from "../theme.ts";
 import type { BudgetStatus } from "../services/types.ts";
 import type { EngineStatus } from "../hooks/useImageEngine.ts";
 import type { VisionStatus } from "../hooks/useVisionStatus.ts";
@@ -38,10 +38,10 @@ export function StatusBar({
 }: StatusBarProps) {
 	const dotColor =
 		engineStatus === "up"
-			? colors.warmParchment
+			? tokens.accent
 			: engineStatus === "starting"
-				? colors.ashGray
-				: colors.stoneGray;
+				? tokens.warn
+				: tokens.fgDim;
 	const statusLabel =
 		engineStatus === "up"
 			? "up"

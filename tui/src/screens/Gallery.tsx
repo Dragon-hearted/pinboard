@@ -37,7 +37,7 @@ export function Gallery({
 	const selected = references[selectedIndex] ?? null;
 
 	return (
-		<Card {...cardProps}>
+		<Card {...cardProps} focused={focused}>
 			<Box justifyContent="space-between">
 				<Text color={colors.ashGray}>{caption("Gallery")}</Text>
 				{focused ? <Pill>focus</Pill> : null}

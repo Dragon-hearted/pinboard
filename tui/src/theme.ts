@@ -1,5 +1,6 @@
-import chalk from "chalk";
-
+// ── Legacy palette (back-compat for existing callsites) ──────────────────
+// Phase 2 migrates these to the semantic tokens below; Phase 1 keeps them
+// verbatim so screens that import `colors.*` continue to render unchanged.
 export const colors = {
 	warmParchment: "#faf9f6",
 	ashGray: "#afaeac",
@@ -13,15 +14,33 @@ export const colors = {
 
 export type ColorName = keyof typeof colors;
 
-export const warmParchment = (text: string) =>
-	chalk.hex(colors.warmParchment)(text);
-export const ashGray = (text: string) => chalk.hex(colors.ashGray)(text);
-export const stoneGray = (text: string) => chalk.hex(colors.stoneGray)(text);
-export const earthGray = (text: string) => chalk.hex(colors.earthGray)(text);
-export const mistBorder = (text: string) => chalk.hex(colors.mistBorder)(text);
-export const linkGray = (text: string) => chalk.hex(colors.linkGray)(text);
-export const mutedOchre = (text: string) => chalk.hex(colors.mutedOchre)(text);
-export const mutedRust = (text: string) => chalk.hex(colors.mutedRust)(text);
+// ── Darkroom palette (Phase 1) ───────────────────────────────────────────
+export const palette = {
+	inkBlack: "#0a0908",
+	noir: "#1a1716",
+	chromeGray: "#4a4744",
+	silverHalide: "#b9b3a8",
+	bone: "#f3eee5",
+	darkroomRed: "#c84630",
+	safeAmber: "#e8a14e",
+	kodakYellow: "#f5c84c",
+} as const;
+
+// ── Semantic tokens — new components import these ────────────────────────
+export const tokens = {
+	bg: palette.inkBlack,
+	bgElevated: palette.noir,
+	fgPrimary: palette.bone,
+	fgMuted: palette.silverHalide,
+	fgDim: palette.chromeGray,
+	border: palette.chromeGray,
+	borderFocus: palette.kodakYellow,
+	accent: palette.darkroomRed,
+	warn: palette.safeAmber,
+	error: palette.darkroomRed,
+	ok: palette.bone,
+	highlight: palette.kodakYellow,
+} as const;
 
 export const caption = (text: string) =>
 	text.toUpperCase().split(/\s+/).filter(Boolean).join("  ");
