@@ -61,7 +61,7 @@ export function PromptPanel({
 	}
 
 	return (
-		<Card {...cardProps}>
+		<Card {...cardProps} focused={focused}>
 			<Box justifyContent="space-between">
 				<Text color={colors.ashGray}>{caption("Prompt")}</Text>
 				<Box>

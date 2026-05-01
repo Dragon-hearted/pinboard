@@ -46,7 +46,7 @@ export function Preview({
 		Math.floor(termCols * PREVIEW_WIDTH_FRACTION) - PREVIEW_CHROME_COLS,
 	);
 	return (
-		<Card {...cardProps}>
+		<Card {...cardProps} focused={focused}>
 			<Box justifyContent="space-between">
 				<Text color={colors.ashGray}>{caption("Preview")}</Text>
 				{focused ? <Pill>focus</Pill> : null}
