@@ -88,6 +88,8 @@ export interface UseKeyboardOpts {
 	onInvalidKey?(reason: string): void;
 	/** Capital-R "reload tools" — restarts image-engine + invalidates vision probe cache. */
 	onReloadTools?(): void;
+	/** Shift+Tab inside the Prompt panel: flip Intent ↔ Draft sub-focus. */
+	onPromptSubFocusToggle?(): void;
 }
 
 const PRINTABLE = /^[\x20-\x7e]$/;
@@ -104,6 +106,7 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		captureMode,
 		onInvalidKey,
 		onReloadTools,
+		onPromptSubFocusToggle,
 	} = opts;
 
 	const { stdin, isRawModeSupported } = useStdin();
@@ -146,6 +149,10 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		if (captureMode) {
 			if (key.escape) {
 				setFocus("gallery");
+				return;
+			}
+			if (key.tab && key.shift && focus === "prompt") {
+				onPromptSubFocusToggle?.();
 				return;
 			}
 			if (key.tab) {
@@ -197,6 +204,10 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 		}
 		if (input === "x" || input === "X") {
 			setModal("clear-confirm");
+			return;
+		}
+		if (key.tab && key.shift && focus === "prompt") {
+			onPromptSubFocusToggle?.();
 			return;
 		}
 		if (key.tab) {

@@ -56,7 +56,7 @@ const GROUPS: Group[] = [
 		name: "Meta",
 		bindings: [
 			{ key: "?", action: "Toggle help" },
-			{ key: "R", action: "Reload tools — restart image-engine + reset vision probe" },
+			{ key: "R", action: "Reload API keys + tools — re-read .env, restart image-engine, reset vision probe" },
 			{ key: "Esc", action: "Exit edit / close modal" },
 			{ key: "q", action: "Quit" },
 		],
