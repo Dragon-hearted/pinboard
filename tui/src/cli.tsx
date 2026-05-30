@@ -75,18 +75,32 @@ const smoke = Boolean(values.smoke || values.ci);
 const envTimeout = process.env.PINBOARD_SMOKE_TIMEOUT_MS;
 const flagTimeout = values["smoke-timeout-ms"];
 const rawTimeout = flagTimeout ?? envTimeout;
-const parsedTimeout = rawTimeout !== undefined ? parseInt(rawTimeout, 10) : NaN;
-const smokeTimeoutMs =
-  Number.isFinite(parsedTimeout) && parsedTimeout >= 0 ? parsedTimeout : 150;
+// Strict validation: only accept integer-only strings. parseInt would silently
+// accept malformed values like "200ms" (→200) and let a misconfigured CI run
+// pass with the wrong timeout, so reject anything non-integer or negative.
+let smokeTimeoutMs = 150;
+if (rawTimeout !== undefined) {
+  if (!/^\d+$/.test(rawTimeout.trim())) {
+    process.stderr.write(
+      `pinboard: invalid --smoke-timeout-ms '${rawTimeout}' — expected a non-negative integer (milliseconds).\n`,
+    );
+    process.exit(2);
+  }
+  smokeTimeoutMs = parseInt(rawTimeout, 10);
+}
 
 if (values["no-color"]) {
   process.env.FORCE_COLOR = "0";
   process.env.NO_COLOR = "1";
 }
 
-if (!process.stdout.isTTY && !smoke) {
+// Ink's useStdin() puts the terminal into raw mode, so the TUI needs BOTH a
+// TTY stdin and stdout. Guarding stdout alone still lets `echo "" | pinboard`
+// (piped stdin) reach the renderer and crash, so require both unless --smoke.
+if ((!process.stdin.isTTY || !process.stdout.isTTY) && !smoke) {
   process.stderr.write(
-    "pinboard: refusing to launch TUI on a non-TTY stdout. " +
+    "pinboard: refusing to launch TUI without an interactive terminal " +
+      "(both stdin and stdout must be a TTY). " +
       "Hint: run in an interactive terminal, or use --smoke for a smoke test.\n",
   );
   process.exit(2);

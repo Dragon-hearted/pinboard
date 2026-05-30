@@ -206,10 +206,9 @@ export function useKeyboard(opts: UseKeyboardOpts): void {
 			setModal("clear-confirm");
 			return;
 		}
-		if (key.tab && key.shift && focus === "prompt") {
-			onPromptSubFocusToggle?.();
-			return;
-		}
+		// NOTE: Shift+Tab in prompt focus is handled in the captureMode branch
+		// above. This branch only runs when captureMode is false (focus !==
+		// "prompt"), so a Shift+Tab/prompt handler here would be unreachable.
 		if (key.tab) {
 			setFocus(nextFocus(focus));
 			return;

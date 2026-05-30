@@ -2,7 +2,7 @@ node_modules/
 dist/
 .env
 .env.*
-!.env.sample
+!.env.example
 uploads/
 downloads/
 *.db
@@ -11,3 +11,4 @@ downloads/
 .DS_Store
 logs/
 .claude/
+demo/out/

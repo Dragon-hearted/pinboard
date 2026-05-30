@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import type Anthropic_ from "@anthropic-ai/sdk";
+import { logWarn } from "./logger";
 
 type MediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
 type ContentBlock = Anthropic_.ContentBlockParam;
@@ -68,7 +69,7 @@ export async function draftWithSdk(opts: SdkDraftOpts): Promise<string> {
 	const apiKey = process.env.ANTHROPIC_API_KEY;
 	if (!apiKey) throw new SdkMissingKeyError();
 
-	console.warn(
+	logWarn(
 		"vision: SDK fallback active (PINBOARD_ALLOW_API=1) — paid API call",
 	);
 

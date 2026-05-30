@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import * as db from "../services/db.ts";
 import * as imageengine from "../services/imageengine.ts";
+import { logWarn } from "../services/logger.ts";
 import {
 	detectImageExt,
 	ensureDownloadsDir,
@@ -36,7 +37,7 @@ export async function loadReferenceImages(
 	for (const id of ids) {
 		const row = db.getImage(id);
 		if (!row) {
-			console.warn(`[pinboard] ref ${id}: no image row found, skipping`);
+			logWarn(`[pinboard] ref ${id}: no image row found, skipping`);
 			continue;
 		}
 		try {
@@ -46,7 +47,7 @@ export async function loadReferenceImages(
 				mimeType: row.mimeType,
 			});
 		} catch (err) {
-			console.warn(
+			logWarn(
 				`[pinboard] ref ${id}: failed to load ${row.path}: ${(err as Error).message}`,
 			);
 		}
