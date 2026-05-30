@@ -8,6 +8,7 @@ import { listModels as registryListModels } from "../../../../prompt-writer/src/
 import type { ModelEntry } from "../../../../prompt-writer/src/registry";
 import * as claudevision from "./claudevision";
 import * as claudesdk from "./claudesdk";
+import { logWarn } from "./logger";
 import type { WisGateModel } from "./types";
 
 const KNOWLEDGE_DIR = resolve(
@@ -375,7 +376,7 @@ export async function draftFromRefs(
 			cliErr instanceof claudevision.ClaudeUnavailableError
 				? "vision unavailable"
 				: `vision error: ${(cliErr as Error).message.slice(0, 100)}`;
-		console.warn(`promptwriter.draftFromRefs: ${message} — using deterministic template`);
+		logWarn(`promptwriter.draftFromRefs: ${message} — using deterministic template`);
 		return applyTemplate(det, modelName);
 	}
 }

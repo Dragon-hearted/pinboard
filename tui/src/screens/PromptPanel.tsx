@@ -12,6 +12,8 @@ type CardProps = ComponentProps<typeof Card>;
 
 interface PromptPanelProps {
 	focused: boolean;
+	/** Which sub-field owns input while the prompt panel is focused. */
+	subFocus?: "draft" | "intent";
 	draft: string;
 	onDraftChange(value: string): void;
 	onDraftSubmit(value: string): void;
@@ -30,6 +32,7 @@ interface PromptPanelProps {
 
 export function PromptPanel({
 	focused,
+	subFocus = "draft",
 	draft,
 	onDraftChange,
 	onDraftSubmit,
@@ -44,6 +47,8 @@ export function PromptPanel({
 	intentMap,
 	cardProps,
 }: PromptPanelProps) {
+	const intentActive = focused && subFocus === "intent";
+	const draftActive = focused && subFocus === "draft";
 	const tokens = draft.match(/@(\d+)/g) ?? [];
 	const resolvedRefs = tokens
 		.map((t) => {
@@ -61,11 +66,13 @@ export function PromptPanel({
 	}
 
 	return (
-		<Card {...cardProps}>
+		<Card {...cardProps} focused={focused}>
 			<Box justifyContent="space-between">
 				<Text color={colors.ashGray}>{caption("Prompt")}</Text>
 				<Box>
-					{focused ? <Pill>editing</Pill> : null}
+					{focused ? (
+						<Pill>{subFocus === "intent" ? "intent" : "editing"}</Pill>
+					) : null}
 					{inFlight ? (
 						<Box marginLeft={1}>
 							<Spinner label="Generating" />
@@ -99,13 +106,14 @@ export function PromptPanel({
 					marginTop={1}
 					flexDirection="column"
 					borderStyle="single"
-					borderColor={colors.mistBorder}
-					borderDimColor
+					borderColor={intentActive ? colors.ashGray : colors.mistBorder}
+					borderDimColor={!intentActive}
 					paddingX={1}
 				>
 					<Text color={colors.stoneGray}>{caption("Intent (vision drafts a complete prompt from this)")}</Text>
 					<Box marginTop={0}>
 						<TextInput
+							isDisabled={!intentActive}
 							placeholder="make the bag red, keep model pose…"
 							defaultValue={intent ?? ""}
 							onChange={onIntentChange}
@@ -118,15 +126,15 @@ export function PromptPanel({
 				marginTop={1}
 				flexDirection="column"
 				borderStyle="single"
-				borderColor={focused ? colors.ashGray : colors.mistBorder}
-				borderDimColor={!focused}
+				borderColor={draftActive ? colors.ashGray : colors.mistBorder}
+				borderDimColor={!draftActive}
 				paddingX={1}
 			>
-				{focused ? (
+				{draftActive ? (
 					<MultilineEditor
 						defaultValue={draft}
 						placeholder="Describe the image… use @1 @2 to pin references."
-						focused={focused}
+						focused={draftActive}
 						onChange={onDraftChange}
 						onSubmit={onDraftSubmit}
 						onCancel={onDraftCancel}
@@ -155,8 +163,10 @@ export function PromptPanel({
 				<Text color={colors.stoneGray}>
 					{caption(
 						focused
-							? "Tab/Esc exit · Enter submit · Ctrl+J newline"
-							: "g generate · w draft from intent · u promote latest · t toggle intent · R reload tools",
+							? intentActive
+								? "Shift+Tab → draft · Esc/Tab exit"
+								: "Shift+Tab → intent · Tab/Esc exit · Enter submit · Ctrl+J newline"
+							: "g generate · w draft from intent · u promote latest · t toggle intent · R reload keys",
 					)}
 				</Text>
 			</Box>

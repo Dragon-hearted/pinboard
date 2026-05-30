@@ -20,9 +20,11 @@ const HINTS: Record<FocusId, Chord[]> = {
 		{ key: "t", label: "toggle intent" },
 		{ key: "g", label: "generate" },
 		{ key: "d", label: "delete" },
+		{ key: "R", label: "reload keys" },
 	],
 	prompt: [
 		{ key: "Tab/Esc", label: "exit" },
+		{ key: "Shift+Tab", label: "swap intent/draft" },
 		{ key: "Enter", label: "submit" },
 		{ key: "Ctrl+J", label: "newline" },
 	],

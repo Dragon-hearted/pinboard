@@ -31,6 +31,7 @@ import * as db from "./services/db.ts";
 import * as promptwriter from "./services/promptwriter.ts";
 import * as claudevision from "./services/claudevision.ts";
 import * as imageengine from "./services/imageengine.ts";
+import { reloadEnvFiles } from "./services/envloader.ts";
 import type { PromptWriterModelInfo } from "./services/promptwriter.ts";
 import type { AspectRatio } from "./services/types.ts";
 
@@ -45,6 +46,9 @@ export function App() {
 	const vision = useVisionStatus(reloadToken);
 
 	const [focus, setFocus] = useState<FocusId>("gallery");
+	const [promptSubFocus, setPromptSubFocus] = useState<"draft" | "intent">(
+		"draft",
+	);
 	const [modal, setModal] = useState<ModalId>(null);
 	const [draft, setDraft] = useState("");
 	const [intent, setIntent] = useState("");
@@ -231,13 +235,18 @@ export function App() {
 	}, [refs, flash]);
 
 	const reloadTools = useCallback(async () => {
-		flash("Reloading tools…", "info", 1500);
+		flash("Reloading API keys + tools…", "info", 1500);
+		const envResult = reloadEnvFiles();
 		claudevision.__resetProbeCache();
 		setReloadToken((n) => n + 1);
 		try {
 			await imageengine.restart({ silent: true });
 			await engine.refreshBudget();
-			flash("Tools reloaded — fresh keys + vision probe", "info", 2200);
+			const keyMsg =
+				envResult.keysUpdated.length > 0
+					? `keys: ${envResult.keysUpdated.join(", ")}`
+					: "no env changes";
+			flash(`Reloaded — ${keyMsg}`, "info", 2400);
 		} catch (e) {
 			flash(`Reload failed: ${(e as Error).message}`, "error", 3000);
 		}
@@ -312,6 +321,10 @@ export function App() {
 				? previewKeymap
 				: promptKeymap;
 
+	useEffect(() => {
+		if (focus !== "prompt") setPromptSubFocus("draft");
+	}, [focus]);
+
 	useKeyboard({
 		focus,
 		modal,
@@ -323,6 +336,9 @@ export function App() {
 		onInvalidKey: (reason) => flash(reason, "warn", 1800),
 		onReloadTools: () => {
 			void reloadTools();
+		},
+		onPromptSubFocusToggle: () => {
+			setPromptSubFocus((s) => (s === "draft" ? "intent" : "draft"));
 		},
 	});
 
@@ -366,6 +382,7 @@ export function App() {
 
 					<PromptPanel
 						focused={focus === "prompt"}
+						subFocus={promptSubFocus}
 						draft={draft}
 						onDraftChange={setDraft}
 						onDraftSubmit={(value) => {

@@ -136,9 +136,16 @@ export async function restart(
 	let pids: string[] = [];
 	let lsofAvailable = false;
 	try {
-		const lsof = spawnSync("lsof", ["-i", `:${port}`, "-t"], {
-			encoding: "utf8",
-		});
+		// `-sTCP:LISTEN` restricts to the listening server PID. Without this,
+		// lsof also returns every PID that holds an *outbound* connection to
+		// the port — which includes the pinboard TUI itself (it keeps fetch
+		// keepalive sockets to /health). Killing those PIDs would SIGTERM the
+		// TUI mid-reload (see error: "Recipe `start` was terminated by signal 15").
+		const lsof = spawnSync(
+			"lsof",
+			["-i", `:${port}`, "-sTCP:LISTEN", "-t"],
+			{ encoding: "utf8" },
+		);
 		// `lsof` exits 0 when it finds a listener and 1 when it doesn't —
 		// either is "lsof itself ran fine". Anything that throws (ENOENT) or
 		// emits a system-level error is treated as unavailable.
@@ -178,7 +185,7 @@ export async function restart(
 				: "lsof unavailable on this system";
 			throw new Error(
 				`ImageEngine on :${port} still answering after SIGTERM and ${reason}. ` +
-					`Kill manually before reloading: lsof -i :${port} -t | xargs kill -9 (or platform equivalent)`,
+					`Kill manually before reloading: lsof -i :${port} -sTCP:LISTEN -t | xargs kill -9 (or platform equivalent)`,
 			);
 		}
 		for (const pid of pids) {
@@ -192,7 +199,7 @@ export async function restart(
 		}
 		if (await healthCheck()) {
 			throw new Error(
-				`ImageEngine subprocess on :${port} survived SIGTERM and SIGKILL — kill manually: lsof -i :${port} -t | xargs kill -9`,
+				`ImageEngine subprocess on :${port} survived SIGTERM and SIGKILL — kill manually: lsof -i :${port} -sTCP:LISTEN -t | xargs kill -9`,
 			);
 		}
 	}

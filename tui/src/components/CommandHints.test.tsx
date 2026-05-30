@@ -24,6 +24,9 @@ describe("CommandHints", () => {
 			expect(frame).toMatch(/generate/);
 			expect(frame).toMatch(/d /);
 			expect(frame).toMatch(/delete/);
+			expect(frame).toMatch(/R /);
+			expect(frame).toMatch(/reload/);
+			expect(frame).toMatch(/keys/);
 			expect(frame).toMatchSnapshot();
 		} finally {
 			ui.unmount();
